@@ -1,0 +1,20 @@
+* text=auto
+*.md text eol=lf
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+*.filters text eol=crlf
+*.cpp text
+*.h text
+*.vert text
+*.frag text
+*.ms text
+*.bmp binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.ttf binary
+*.max binary
+*.3ds binary
+*.lib binary
+*.dll binary
+*.rar binary

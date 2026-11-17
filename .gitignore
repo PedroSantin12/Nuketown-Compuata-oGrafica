@@ -1,0 +1,30 @@
+# Visual Studio e compilacao
+.vs/
+**/bin-int/
+*.exe
+**/bin/**/*.obj
+*.pdb
+*.ilk
+*.idb
+*.ipch
+*.tlog
+*.lastbuildstate
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.log
+
+# Preferencias e informacoes locais
+imgui.ini
+OpenGL_Info.txt
+*.lnk
+.DS_Store
+Thumbs.db
+
+# Backups automaticos do 3ds Max
+**/autoback/
+*.max.bak
+
+# Os .lib e .dll do SDK e as DLLs de bin/Debug sao dependencias do projeto.
+# Eles ficam versionados; nao usar regras genericas *.lib ou *.dll.
