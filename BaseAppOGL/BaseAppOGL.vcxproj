@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -60,6 +60,15 @@
     <ClCompile Include="Engine\main.cpp" />
     <ClCompile Include="Engine\CSceneManager.cpp" />
     <ClCompile Include="Scenes\Nuketown\SceneNuketown.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownHouses.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownLandmarks.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownYards.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownGardens.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownVehicles.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownBoundary.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownRendering.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownLandscape.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownLighting.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Scenes\Common\Assets.frag" />
@@ -78,6 +87,14 @@
     <None Include="Scenes\Common\Text2D.vert" />
     <None Include="Scenes\Nuketown\Nuketown.vert" />
     <None Include="Scenes\Nuketown\Nuketown.frag" />
+    <None Include="Scenes\Nuketown\NuketownSky.vert" />
+    <None Include="Scenes\Nuketown\NuketownSky.frag" />
+    <None Include="Scenes\Nuketown\NuketownShadow.vert" />
+    <None Include="Scenes\Nuketown\NuketownShadow.frag" />
+    <None Include="Scenes\Nuketown\Assets\Signs\NUKETOWN.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Signs\POLICE.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Signs\DELIVERY.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Signs\MakeLabels.py" />
     <None Include="Scenes\Nuketown\Assets\Bus\MakeBus.ms" />
     <None Include="Scenes\Nuketown\Assets\Bus\BUSPAINT.BMP" />
   </ItemGroup>

@@ -514,3 +514,368 @@ void CPrimitives::cleanup() {
         buffersInitialized = false;
     }
 }
+
+
+// Small procedural meshes use the same position/UV/normal layout as the class primitives.
+namespace
+{
+    struct BodySection { float z, halfWidth, bottom, top; };
+
+    void LoftBody(std::vector<PrimVertex>& vertices, std::vector<unsigned int>& indices,
+        const std::vector<BodySection>& sections)
+    {
+        constexpr int cornerSteps = 5;
+        constexpr int ringSize = 4 * (cornerSteps + 1);
+        for (const BodySection& section : sections)
+        {
+            const float radius = std::min(0.10f, (section.top - section.bottom) * 0.26f);
+            for (int corner = 0; corner < 4; ++corner)
+            {
+                const float cx = (corner == 0 || corner == 3) ? section.halfWidth - radius : -section.halfWidth + radius;
+                const float cy = corner < 2 ? section.top - radius : section.bottom + radius;
+                for (int step = 0; step <= cornerSteps; ++step)
+                {
+                    const float angle = static_cast<float>((corner * 90.0 + step * 90.0 / cornerSteps) * M_PI / 180.0);
+                    PrimVertex vertex{};
+                    vertex.position[0] = cx + radius * std::cos(angle);
+                    vertex.position[1] = cy + radius * std::sin(angle);
+                    vertex.position[2] = section.z;
+                    vertex.texCoord[0] = vertex.position[0] + 0.5f;
+                    vertex.texCoord[1] = section.z + 0.5f;
+                    vertices.push_back(vertex);
+                }
+            }
+        }
+        for (unsigned int section = 0; section + 1 < sections.size(); ++section)
+            for (unsigned int point = 0; point < ringSize; ++point)
+            {
+                const unsigned int a = section * ringSize + point;
+                const unsigned int b = section * ringSize + (point + 1) % ringSize;
+                const unsigned int c = a + ringSize;
+                const unsigned int d = b + ringSize;
+                indices.insert(indices.end(), {a, b, c, b, d, c});
+            }
+        for (int end = 0; end < 2; ++end)
+        {
+            const unsigned int ring = end == 0 ? 0 : static_cast<unsigned int>((sections.size() - 1) * ringSize);
+            PrimVertex center{};
+            center.position[1] = (sections[end == 0 ? 0 : sections.size() - 1].bottom + sections[end == 0 ? 0 : sections.size() - 1].top) * 0.5f;
+            center.position[2] = sections[end == 0 ? 0 : sections.size() - 1].z;
+            center.texCoord[0] = center.texCoord[1] = 0.5f;
+            const unsigned int middle = static_cast<unsigned int>(vertices.size());
+            vertices.push_back(center);
+            for (unsigned int point = 0; point < ringSize; ++point)
+            {
+                const unsigned int a = ring + point, b = ring + (point + 1) % ringSize;
+                if (end == 0) indices.insert(indices.end(), {middle, b, a});
+                else indices.insert(indices.end(), {middle, a, b});
+            }
+        }
+        // Averaged face normals smooth the longitudinal shoulders and rounded corners.
+        for (size_t triangle = 0; triangle < indices.size(); triangle += 3)
+        {
+            PrimVertex& a = vertices[indices[triangle]];
+            PrimVertex& b = vertices[indices[triangle + 1]];
+            PrimVertex& c = vertices[indices[triangle + 2]];
+            const float ux = b.position[0] - a.position[0], uy = b.position[1] - a.position[1], uz = b.position[2] - a.position[2];
+            const float vx = c.position[0] - a.position[0], vy = c.position[1] - a.position[1], vz = c.position[2] - a.position[2];
+            const float n[] = {uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx};
+            for (PrimVertex* vertex : {&a, &b, &c})
+                for (int axis = 0; axis < 3; ++axis) vertex->normal[axis] += n[axis];
+        }
+        for (PrimVertex& vertex : vertices)
+        {
+            const float length = std::sqrt(vertex.normal[0] * vertex.normal[0] + vertex.normal[1] * vertex.normal[1] + vertex.normal[2] * vertex.normal[2]);
+            if (length > 0.00001f)
+                for (float& component : vertex.normal) component /= length;
+        }
+    }
+}
+
+void CPrimitives::generateRoundedCube(float radius, int segments)
+{
+    clearData();
+    radius = std::clamp(radius, 0.001f, 0.45f);
+    segments = std::max(1, segments);
+    const float inner = 0.5f - radius;
+    // Extra samples lie on the bevel, rather than spending the grid on a flat face.
+    std::vector<float> coordinates;
+    for (int index = 0; index <= segments; ++index)
+        coordinates.push_back(-0.5f + radius * index / segments);
+    coordinates.push_back(inner);
+    for (int index = 1; index <= segments; ++index)
+        coordinates.push_back(inner + radius * index / segments);
+    const unsigned int side = static_cast<unsigned int>(coordinates.size());
+    for (int face = 0; face < 6; ++face)
+    {
+        const int axis = face / 2;
+        const float sign = face % 2 ? -1.0f : 1.0f;
+        const unsigned int first = static_cast<unsigned int>(vertices.size());
+        for (float v : coordinates)
+            for (float u : coordinates)
+            {
+                float point[3]{};
+                point[axis] = sign * 0.5f;
+                point[(axis + 1) % 3] = u;
+                point[(axis + 2) % 3] = v;
+                float nearest[3], delta[3];
+                float lengthSquared = 0.0f;
+                for (int coordinate = 0; coordinate < 3; ++coordinate)
+                {
+                    nearest[coordinate] = std::clamp(point[coordinate], -inner, inner);
+                    delta[coordinate] = point[coordinate] - nearest[coordinate];
+                    lengthSquared += delta[coordinate] * delta[coordinate];
+                }
+                const float length = std::sqrt(lengthSquared);
+                PrimVertex vertex{};
+                for (int coordinate = 0; coordinate < 3; ++coordinate)
+                {
+                    vertex.normal[coordinate] = delta[coordinate] / length;
+                    vertex.position[coordinate] = nearest[coordinate] + vertex.normal[coordinate] * radius;
+                }
+                vertex.texCoord[0] = u + 0.5f; vertex.texCoord[1] = v + 0.5f;
+                vertices.push_back(vertex);
+            }
+        for (unsigned int row = 0; row + 1 < side; ++row)
+            for (unsigned int column = 0; column + 1 < side; ++column)
+            {
+                const unsigned int a = first + row * side + column, b = a + 1, c = a + side, d = c + 1;
+                if (sign > 0) indices.insert(indices.end(), {a, b, c, b, d, c});
+                else indices.insert(indices.end(), {a, c, b, b, c, d});
+            }
+    }
+}
+
+void CPrimitives::generateCarBody()
+{
+    clearData();
+    LoftBody(vertices, indices, {{-0.50f,0.40f,-0.21f,0.12f}, {-0.47f,0.47f,-0.40f,0.28f},
+        {-0.34f,0.50f,-0.48f,0.42f}, {-0.18f,0.50f,-0.50f,0.50f},
+        {0.18f,0.50f,-0.50f,0.49f}, {0.38f,0.49f,-0.43f,0.37f},
+        {0.47f,0.46f,-0.33f,0.23f}, {0.50f,0.40f,-0.20f,0.09f}});
+}
+
+void CPrimitives::generateCarCabin()
+{
+    clearData();
+    // A single glazed shell follows the sloping windscreen and rear screen.
+    LoftBody(vertices, indices, {{-0.50f,0.49f,-0.50f,-0.46f}, {-0.32f,0.40f,-0.50f,0.47f},
+        {-0.27f,0.40f,-0.50f,0.50f}, {0.20f,0.40f,-0.50f,0.50f},
+        {0.26f,0.40f,-0.50f,0.47f}, {0.50f,0.49f,-0.50f,-0.46f}});
+}
+
+void CPrimitives::generateTruckHood()
+{
+    clearData();
+    LoftBody(vertices, indices, {{-0.50f,0.48f,-0.50f,0.43f}, {-0.40f,0.50f,-0.50f,0.50f},
+        {0.12f,0.49f,-0.48f,0.46f}, {0.35f,0.46f,-0.42f,0.35f},
+        {0.47f,0.41f,-0.34f,0.22f}, {0.50f,0.35f,-0.22f,0.05f}});
+}
+
+void CPrimitives::generateWheelTorus()
+{
+    generateTorus(0.76f, 0.24f, 48, 14);
+    // The original torus has its axle on Y; wheels use an axle on local Z.
+    for (PrimVertex& vertex : vertices)
+    {
+        const float z = vertex.position[2];
+        vertex.position[2] = vertex.position[1]; vertex.position[1] = -z;
+        const float normalZ = vertex.normal[2];
+        vertex.normal[2] = vertex.normal[1]; vertex.normal[1] = -normalZ;
+    }
+}
+
+
+void CPrimitives::generateTerrainRidge()
+{
+    clearData();
+    constexpr int columns = 96, rows = 20;
+    const auto height = [](float x, float z)
+    {
+        const auto hash = [](float xx, float zz)
+        {
+            const float value = std::sin(xx * 127.1f + zz * 311.7f) * 43758.5453f;
+            return value - std::floor(value);
+        };
+        const auto noise = [&hash](float xx, float zz)
+        {
+            const float ix = std::floor(xx), iz = std::floor(zz);
+            float fx = xx - ix, fz = zz - iz;
+            fx = fx * fx * (3.0f - 2.0f * fx);
+            fz = fz * fz * (3.0f - 2.0f * fz);
+            const float a = hash(ix, iz) * (1.0f - fx) + hash(ix + 1.0f, iz) * fx;
+            const float b = hash(ix, iz + 1.0f) * (1.0f - fx) + hash(ix + 1.0f, iz + 1.0f) * fx;
+            return a * (1.0f - fz) + b * fz;
+        };
+        const float relief = 0.38f + noise(x * 9.0f, z * 3.0f) * 0.43f
+            + noise(x * 25.0f + 3.0f, z * 8.0f) * 0.15f
+            + noise(x * 57.0f, z * 17.0f + 9.0f) * 0.055f;
+        const float profile = std::pow(std::max(0.0f, std::sin(z * static_cast<float>(M_PI))), 1.05f);
+        return profile * relief;
+    };
+    for (int row = 0; row <= rows; ++row)
+        for (int column = 0; column <= columns; ++column)
+        {
+            const float x = static_cast<float>(column) / columns;
+            const float z = static_cast<float>(row) / rows;
+            constexpr float sample = 0.001f;
+            float normal[] = {-(height(x + sample, z) - height(x - sample, z)) / (2.0f * sample),
+                1.0f, -(height(x, std::min(1.0f, z + sample)) - height(x, std::max(0.0f, z - sample))) / (2.0f * sample)};
+            normalizeVector(normal);
+            vertices.push_back({{x - 0.5f, height(x,z), z - 0.5f}, {x * 12.0f, z * 3.0f}, {normal[0],normal[1],normal[2]}});
+        }
+    for (int row = 0; row < rows; ++row)
+        for (int column = 0; column < columns; ++column)
+        {
+            const unsigned int a = row * (columns + 1) + column;
+            const unsigned int b = a + 1, c = a + columns + 1, d = c + 1;
+            indices.insert(indices.end(), {a, c, b, b, c, d});
+        }
+}
+
+
+void CPrimitives::generateDesertBasin(float innerRadius, float outerRadius)
+{
+    clearData();
+    innerRadius = std::max(75.0f, innerRadius);
+    outerRadius = std::max(innerRadius + 30.0f, outerRadius);
+    constexpr unsigned int sectors = 192, bands = 24;
+    constexpr float baseY = -0.06f, bottomY = -2.0f;
+    const auto height = [innerRadius, outerRadius](float x, float z)
+    {
+        const float radius = std::sqrt(x*x + z*z);
+        if (radius <= innerRadius || radius >= outerRadius) return baseY;
+        const auto hash = [](float xx, float zz)
+        {
+            const float value = std::sin(xx * 127.1f + zz * 311.7f) * 43758.5453f;
+            return value - std::floor(value);
+        };
+        const auto noise = [&hash](float xx, float zz)
+        {
+            const float ix=std::floor(xx), iz=std::floor(zz);
+            float fx=xx-ix, fz=zz-iz;
+            fx=fx*fx*(3.0f-2.0f*fx); fz=fz*fz*(3.0f-2.0f*fz);
+            const float a=hash(ix,iz)*(1-fx)+hash(ix+1,iz)*fx;
+            const float b=hash(ix,iz+1)*(1-fx)+hash(ix+1,iz+1)*fx;
+            return a*(1-fz)+b*fz;
+        };
+        const float t = (radius-innerRadius)/(outerRadius-innerRadius);
+        const float profile=std::pow(std::max(0.0f,std::sin(t*static_cast<float>(M_PI))),1.4f);
+        const float relief=18.0f+noise(x*.025f,z*.025f)*10.0f
+            +noise(x*.065f+7.0f,z*.065f)*4.0f+noise(x*.15f,z*.15f+3.0f)*2.0f;
+        return baseY+profile*relief;
+    };
+    const unsigned int row=sectors+1;
+    for (unsigned int band=0; band<=bands; ++band)
+        for (unsigned int sector=0; sector<=sectors; ++sector)
+        {
+            const float radius=innerRadius+(outerRadius-innerRadius)*band/bands;
+            const float angle=sector==sectors?0.0f:static_cast<float>(2.0*M_PI*sector/sectors);
+            const float x=radius*std::cos(angle), z=radius*std::sin(angle);
+            constexpr float step=.25f;
+            float normal[]={-(height(x+step,z)-height(x-step,z))/(2*step),1.0f,
+                -(height(x,z+step)-height(x,z-step))/(2*step)};
+            normalizeVector(normal);
+            vertices.push_back({{x,height(x,z),z},{x*.04f,z*.04f},{normal[0],normal[1],normal[2]}});
+        }
+    for (unsigned int band=0;band<bands;++band)
+        for (unsigned int sector=0;sector<sectors;++sector)
+        {
+            const unsigned int a=band*row+sector,b=a+1,c=a+row,d=c+1;
+            indices.insert(indices.end(),{a,b,c,b,d,c});
+        }
+    // Vertical skirts and a bottom annulus close the underside of the mountains.
+    unsigned int lowerRings[2]{};
+    for (int edge=0;edge<2;++edge)
+    {
+        const float radius=edge==0?innerRadius:outerRadius;
+        const unsigned int first=static_cast<unsigned int>(vertices.size());
+        lowerRings[edge]=first;
+        for (unsigned int sector=0;sector<=sectors;++sector)
+        {
+            const float angle=sector==sectors?0.0f:static_cast<float>(2.0*M_PI*sector/sectors);
+            const float x=radius*std::cos(angle),z=radius*std::sin(angle);
+            const float sign=edge==0?-1.0f:1.0f;
+            vertices.push_back({{x,baseY,z},{0,0},{sign*std::cos(angle),0,sign*std::sin(angle)}});
+            vertices.push_back({{x,bottomY,z},{0,1},{sign*std::cos(angle),0,sign*std::sin(angle)}});
+        }
+        for (unsigned int sector=0;sector<sectors;++sector)
+        {
+            const unsigned int a=first+sector*2,b=a+2,c=a+1,d=b+1;
+            if(edge==1)indices.insert(indices.end(),{a,b,c,b,d,c});
+            else indices.insert(indices.end(),{a,c,b,b,c,d});
+        }
+    }
+    const unsigned int floorStart=static_cast<unsigned int>(vertices.size());
+    for(unsigned int sector=0;sector<=sectors;++sector)
+    {
+        const float angle=sector==sectors?0.0f:static_cast<float>(2.0*M_PI*sector/sectors);
+        for(float radius:{innerRadius,outerRadius})
+            vertices.push_back({{radius*std::cos(angle),bottomY,radius*std::sin(angle)},{0,0},{0,-1,0}});
+    }
+    for(unsigned int sector=0;sector<sectors;++sector)
+    {
+        const unsigned int a=floorStart+sector*2,b=a+2,c=a+1,d=b+1;
+        indices.insert(indices.end(),{a,c,b,b,c,d});
+    }
+}
+
+void CPrimitives::generateRiverRibbon()
+{
+    clearData();
+    constexpr int rows=72,columns=4;
+    for(int row=0;row<=rows;++row)
+    {
+        const float t=static_cast<float>(row)/rows;
+        const float z=-28.0f+54.0f*t;
+        const float center=52.0f+4.0f*std::sin(z*.07f);
+        const float endFade=std::min(1.0f,t/.12f)*std::min(1.0f,(1.0f-t)/.12f);
+        const float width=(1.95f+.25f*std::sin(z*.11f))*std::max(.02f,endFade);
+        for(int column=0;column<=columns;++column)
+        {
+            const float u=static_cast<float>(column)/columns;
+            vertices.push_back({{center+(u*2.0f-1.0f)*width,-.015f,z},{u,t},{0,1,0}});
+        }
+    }
+    for(int row=0;row<rows;++row)
+        for(int column=0;column<columns;++column)
+        {
+            const unsigned int a=row*(columns+1)+column,b=a+1,c=a+columns+1,d=c+1;
+            indices.insert(indices.end(),{a,c,b,b,c,d});
+        }
+}
+
+void CPrimitives::generatePalmFrond()
+{
+    clearData();
+    constexpr int segments=18;
+    for(int segment=0;segment<=segments;++segment)
+    {
+        const float t=static_cast<float>(segment)/segments;
+        const float shape=std::pow(std::max(0.0f,std::sin(t*static_cast<float>(M_PI))),.7f);
+        const float feather=.86f+.14f*std::sin(t*static_cast<float>(M_PI)*12.0f)*std::sin(t*static_cast<float>(M_PI)*12.0f);
+        const float width=.008f+.49f*shape*feather*(1.0f-.17f*t);
+        const float y=.24f*std::sin(t*static_cast<float>(M_PI))-.36f*t*t;
+        for(int column=0;column<3;++column)
+        {
+            const float x=(column-1)*width;
+            const float rib=column==1?.065f*shape:0.0f;
+            vertices.push_back({{x,y+rib,t},{column*.5f,t},{0,0,0}});
+        }
+    }
+    for(int row=0;row<segments;++row)
+        for(int column=0;column<2;++column)
+        {
+            const unsigned int a=row*3+column,b=a+1,c=a+3,d=c+1;
+            indices.insert(indices.end(),{a,c,b,b,c,d});
+        }
+    for(size_t triangle=0;triangle<indices.size();triangle+=3)
+    {
+        PrimVertex& a=vertices[indices[triangle]];PrimVertex& b=vertices[indices[triangle+1]];PrimVertex& c=vertices[indices[triangle+2]];
+        const float ux=b.position[0]-a.position[0],uy=b.position[1]-a.position[1],uz=b.position[2]-a.position[2];
+        const float vx=c.position[0]-a.position[0],vy=c.position[1]-a.position[1],vz=c.position[2]-a.position[2];
+        const float n[]={uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx};
+        for(PrimVertex* vertex:{&a,&b,&c})for(int axis=0;axis<3;++axis)vertex->normal[axis]+=n[axis];
+    }
+    for(PrimVertex& vertex:vertices)normalizeVector(vertex.normal);
+}

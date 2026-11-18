@@ -1,21 +1,30 @@
 # Nuketown — Computação Gráfica
 
-Projeto acadêmico em C++ e OpenGL, desenvolvido a partir da BaseAppOGL fornecida nas aulas. A cena recria uma parte da Nuketown clássica de Call of Duty: Black Ops: quintal de nascimento, exterior da casa e praça com ônibus e caminhão.
+Projeto acadêmico em C++ e OpenGL, desenvolvido a partir da BaseAppOGL fornecida nas aulas. A cena apresenta uma versão simplificada dos exteriores da Nuketown clássica de Call of Duty: Black Ops: duas casas, garagens, quintais e a praça com ônibus e caminhão. Os interiores continuam fechados nesta etapa.
 
-![Prévia da cena](previews/nuketown-texturas.png)
+![Prévia da cena](previews/nuketown-ambiente.png)
 
 ## Estado atual
 
-- Cena própria da Nuketown com casa e garagem sem interiores.
+- Duas casas e garagens, com fachadas verde e amarela, telhados de duas águas e interiores fechados.
+- Dois quintais ligados por rotas laterais, com escadas e decks traseiros acessíveis.
+- Abrigo com treliças, galpão amarelo, churrasqueira, varal e canteiros.
+- Placa legível de Nuketown, carro da garagem, carro da polícia militar e barreira no fim da rua.
+- Fim da rua fechado por cerca, sem casas extras; painéis técnicos ao fundo da praça e torre atrás do perímetro.
+- Cercas mais baixas para enxergar a paisagem, mantendo os limites de circulação.
+- Fundo em 360° com montanhas afastadas, base fechada e chão amplo unido ao horizonte pela névoa.
+- Pequeno rio decorativo e quatro palmeiras além do perímetro, como ambientação do deserto.
 - Movimentação em primeira pessoa, colisões e limites do trecho do mapa.
 - Câmera opcional em terceira pessoa com personagem provisório.
 - Ônibus modelado no 3ds Max, exportado em `.3ds` e carregado com Assimp.
 - Grama, terra, cercas e telhados com imagens da base das aulas.
 - Asfalto, concreto e pintura com detalhes calculados no shader; mistura de grama e terra.
 - Janelas com molduras, montantes, peitoris e aparência de vidro.
-- Iluminação direcional, ponto de luz na garagem e névoa de distância.
+- Carros e caminhão com carrocerias curvas, para-brisas inclinados, pneus toroidais e rodas detalhadas; a traseira do caminhão fica fechada.
+- Céu com nuvens, reflexos por cubemap nos vidros/metais, sombras do sol, luz nas garagens e antialiasing 4x.
+- Quatro postes de rua e quatro refletores com lentes emissivas e iluminação voltada para baixo.
 
-A aparência do vidro usa brilho e uma aproximação da cor do céu. Ainda não há cubemap de reflexão, refração nem transparência de interiores. Os arquivos das cenas de exemplo do professor continuam disponíveis como referência; a aplicação inicia apenas a Nuketown.
+Os vidros refletem um cubemap do céu, gerado na inicialização. Os interiores continuam fechados. O mapa de profundidade do sol é calculado uma vez para os elementos estáticos da cena. A iluminação dos postes no chão também é preparada na inicialização; nas superfícies verticais, ela é calculada no shader. Os arquivos das cenas de exemplo do professor continuam disponíveis como referência; a aplicação inicia apenas a Nuketown.
 
 ## Como abrir e executar
 
@@ -43,7 +52,7 @@ O programa solicita um contexto **OpenGL 4.6**; o driver de vídeo precisa ofere
 | Caps Lock | Alternar modo de arame |
 | Esc | Fechar a aplicação |
 
-O menu também permite ajustar a distância da câmera em terceira pessoa.
+O menu também permite ajustar a distância da câmera em terceira pessoa e ir diretamente ao quintal amarelo. As portas das casas permanecem fechadas; use os caminhos laterais e as escadas externas para explorar.
 
 ## Organização
 
@@ -61,3 +70,7 @@ previews/                        Capturas da aplicação
 ```
 
 O SDK inclui GLFW, GLEW, GLM, Assimp e FreeType. Dear ImGui e stb_image fazem parte dos fontes da base. As licenças disponibilizadas com as dependências estão preservadas em suas respectivas pastas. Executáveis, caches e preferências locais do Visual Studio não são versionados.
+
+## Referência visual
+
+[Call of duty Black ops 1 | Multiplayer Map Showcase | Nuketown](https://www.youtube.com/watch?v=tlEVTAV2HLA), enviado como referência para a disposição dos exteriores. A recriação usa geometria simplificada e materiais da base das aulas; não é uma reprodução exata de todos os assets do jogo. O rio, as palmeiras e a paisagem distante são adições de ambientação fora da área jogável.

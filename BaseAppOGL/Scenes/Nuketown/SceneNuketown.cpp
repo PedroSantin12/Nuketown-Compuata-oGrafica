@@ -8,7 +8,7 @@
 
 namespace
 {
-    const glm::vec3 hazeColor(0.71f, 0.71f, 0.63f);
+    const glm::vec3 hazeColor(0.74f, 0.79f, 0.80f);
     const glm::vec3 asphalt(0.27f, 0.29f, 0.29f);
     const glm::vec3 concrete(0.60f, 0.58f, 0.52f);
     const glm::vec3 warmWhite(0.87f, 0.86f, 0.75f);
@@ -34,32 +34,64 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera())
 {
     shader.LoadShader("Nuketown", "Scenes/Nuketown/Nuketown.vert", "Scenes/Nuketown/Nuketown.frag");
 
+    InitializeRenderingResources();
+
     // Reuse the image loader and texture resources supplied in the class base.
     surfaceTextures.LoadTextureAnisotropic(0, "Scenes/Textures/grass.bmp");
     surfaceTextures.LoadTextureAnisotropic(1, "Scenes/Textures/mud.bmp");
     surfaceTextures.LoadTextureAnisotropic(2, "Scenes/Textures/P1.jpg");
     surfaceTextures.LoadTextureAnisotropic(3, "Scenes/Textures/R1.bmp");
+    surfaceTextures.LoadTextureAnisotropic(4, "Scenes/Nuketown/Assets/Signs/NUKETOWN.BMP");
+    surfaceTextures.LoadTextureAnisotropic(5, "Scenes/Nuketown/Assets/Signs/POLICE.BMP");
+    surfaceTextures.LoadTextureAnisotropic(6, "Scenes/Nuketown/Assets/Signs/DELIVERY.BMP");
+    surfaceTextures.LoadTextureAnisotropic(7, "Scenes/Textures/rock.jpg");
 
     box.generateCube(1.0f);
     cylinder.generateCylinder(1.0f, 1.0f, 72);
     sphere.generateSphere(1.0f, 24, 12);
     pyramid.generatePyramid(1.0f, 1.0f);
+    roundedBox.generateRoundedCube(0.10f, 5);
+    carBody.generateCarBody();
+    carCabin.generateCarCabin();
+    truckHood.generateTruckHood();
+    tire.generateWheelTorus();
+    desertBasin.generateDesertBasin();
+    riverRibbon.generateRiverRibbon();
+    palmFrond.generatePalmFrond();
 
     box.setupBuffers();
     cylinder.setupBuffers();
     sphere.setupBuffers();
     pyramid.setupBuffers();
+    roundedBox.setupBuffers(); carBody.setupBuffers(); carCabin.setupBuffers();
+    truckHood.setupBuffers(); tire.setupBuffers(); desertBasin.setupBuffers();
+    riverRibbon.setupBuffers(); palmFrond.setupBuffers();
 
+    BuildEnvironment();
     BuildStreet();
     BuildSpawnYard();
     BuildHouses();
+    BuildEastYard();
+    BuildWestGarden();
+    BuildStreetLighting();
+    BuildTestSiteFixtures();
+    BuildNorthBoundary();
     BuildPerimeter();
     BuildClockTower();
     BuildBus();
     BuildTruck();
+    BuildLandmarks();
+    BakeStreetLightMap();
 }
 
-SceneNuketown::~SceneNuketown() = default;
+SceneNuketown::~SceneNuketown()
+{
+    glDeleteFramebuffers(1, &shadowFramebuffer);
+    glDeleteTextures(1, &shadowTexture);
+    glDeleteTextures(1, &environmentTexture);
+    glDeleteTextures(1, &streetLightTexture);
+    glDeleteVertexArrays(1, &skyVao);
+}
 
 void SceneNuketown::DrawScene(float)
 {
@@ -69,6 +101,8 @@ void SceneNuketown::DrawScene(float)
     if (width == 0 || height == 0)
         return;
 
+    if (!shadowReady)
+        RenderShadowMap();
     glClearColor(hazeColor.r, hazeColor.g, hazeColor.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -78,31 +112,82 @@ void SceneNuketown::DrawScene(float)
     const glm::mat4 view = thirdPerson
         ? glm::lookAt(viewPosition, camera.Position + camera.Front * 3.0f - glm::vec3(0.0f, 0.65f, 0.0f), camera.WorldUp)
         : camera.GetViewMatrix();
+    const glm::mat4 viewProjection = projection * view;
+    DrawSky(viewProjection, viewPosition);
     shader.Use("Nuketown");
-    shader.SetMat4("uViewProjection", projection * view);
+    shader.SetMat4("uViewProjection", viewProjection);
+    shader.SetMat4("uLightViewProjection", lightViewProjection);
+    shader.SetVec3("uSunDirection", glm::normalize(glm::vec3(-0.55f, 0.85f, 0.42f)));
+    shader.SetInt("uStreetLightMap", 10);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, streetLightTexture);
+    shader.SetInt("uEnvironmentMap", 9);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentTexture);
+    shader.SetInt("uShadowMap", 8);
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, shadowTexture);
     shader.SetVec3("uCameraPosition", viewPosition);
     shader.SetVec3("uHazeColor", hazeColor);
     shader.SetVec3("uGarageLampPosition", garageLampPosition);
+    shader.SetVec3("uSecondGarageLampPosition", secondGarageLampPosition);
+    shader.SetFloat("uTime", static_cast<float>(glfwGetTime()));
+    const int lightCount = static_cast<int>(std::min<size_t>(streetLightPositions.size(), 8));
+    shader.SetInt("uStreetLightCount", lightCount);
+    for (int index = 0; index < lightCount; ++index)
+        shader.SetVec3("uStreetLightPositions[" + std::to_string(index) + "]", streetLightPositions[index]);
 
     shader.SetInt("uGrassMap", 0);
     shader.SetInt("uSoilMap", 1);
     shader.SetInt("uWoodMap", 2);
     shader.SetInt("uRoofMap", 3);
-    for (unsigned int index = 0; index < 4; ++index)
+    shader.SetInt("uSignMap", 4);
+    shader.SetInt("uPoliceMap", 5);
+    shader.SetInt("uDeliveryMap", 6);
+    shader.SetInt("uStoneMap", 7);
+    for (unsigned int index = 0; index < 8; ++index)
     {
         glActiveTexture(GL_TEXTURE0 + index);
         surfaceTextures.ApplyTexture(index);
     }
     glActiveTexture(GL_TEXTURE0);
     shader.SetBool("uUseAssetMaterials", false);
+    // Cull static pieces outside the camera's six frustum planes. Bounds and
+    // normal matrices are computed once, when the map is built.
+    const glm::mat4 rows = glm::transpose(viewProjection);
+    glm::vec4 planes[] = {rows[3] + rows[0], rows[3] - rows[0],
+        rows[3] + rows[1], rows[3] - rows[1], rows[3] + rows[2], rows[3] - rows[2]};
+    for (glm::vec4& plane : planes)
+        plane /= glm::length(glm::vec3(plane));
     for (const Part& part : parts)
     {
+        bool visible = true;
+        for (const glm::vec4& plane : planes)
+            if (glm::dot(glm::vec3(plane), part.boundsCenter) + plane.w < -part.boundsRadius)
+            {
+                visible = false;
+                break;
+            }
+        if (!visible)
+            continue;
         shader.SetMat4("uModel", part.model);
-        shader.SetMat3("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(part.model))));
+        shader.SetMat3("uNormalMatrix", part.normalMatrix);
         shader.SetVec3("uColor", part.color);
         shader.SetVec3("uObjectSize", part.textureSize);
         shader.SetInt("uSurface", static_cast<int>(part.surface));
+        const bool softShadow = part.surface == Surface::Shadow;
+        if (softShadow)
+        {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+        }
         part.mesh->render();
+        if (softShadow)
+        {
+            glDepthMask(GL_TRUE);
+            glDisable(GL_BLEND);
+        }
     }
 
     shader.SetInt("uSurface", static_cast<int>(Surface::Solid));
@@ -155,9 +240,9 @@ void SceneNuketown::ProcessSceneInput(GLFWwindow*, float deltaTime)
     const glm::vec2 direction = glm::normalize(forward * forwardInput + right * sideInput);
     const float speed = input.IsKeyPressed(GLFW_KEY_LEFT_SHIFT) ? 6.3f : 3.6f;
     const float stepTime = std::clamp(deltaTime, 0.0f, 0.05f);
-    const glm::vec2 position = traversal.Move({camera.Position.x, camera.Position.z},
-        direction * (speed * stepTime));
-    camera.Position = {position.x, eyeHeight, position.y};
+    const glm::vec3 feet = camera.Position - glm::vec3(0.0f, eyeHeight, 0.0f);
+    camera.Position = traversal.MoveFeet(feet, direction * (speed * stepTime))
+        + glm::vec3(0.0f, eyeHeight, 0.0f);
 }
 
 glm::vec3 SceneNuketown::GetViewPosition() const
@@ -172,7 +257,7 @@ glm::vec3 SceneNuketown::GetViewPosition() const
 
 void SceneNuketown::DrawAvatar()
 {
-    const glm::mat4 avatar = PlaceInMap({camera.Position.x, 0.05f, camera.Position.z}, 90.0f - camera.Yaw);
+    const glm::mat4 avatar = PlaceInMap({camera.Position.x, camera.Position.y - eyeHeight + 0.05f, camera.Position.z}, 90.0f - camera.Yaw);
     const auto draw = [this, &avatar](CPrimitives& mesh, glm::vec3 center, glm::vec3 size, glm::vec3 color)
     {
         const glm::mat4 model = glm::scale(glm::translate(avatar, center), size);
@@ -208,9 +293,12 @@ void SceneNuketown::DrawMenu()
         ImGui::Checkbox("Terceira pessoa (F5)", &thirdPerson);
         if (thirdPerson)
             ImGui::SliderFloat("Distancia da camera", &cameraDistance, 1.8f, 5.0f, "%.1f m");
-        if (ImGui::Button("Voltar ao ponto inicial (R)"))
+        if (ImGui::Button("Quintal verde (R)"))
             camera = MakeStartingCamera();
+        if (ImGui::Button("Ir ao quintal amarelo"))
+            camera = CCamera({25.0f, eyeHeight, 3.0f}, {0.0f, 1.0f, 0.0f}, -145.0f, -2.5f);
         ImGui::Separator();
+        ImGui::TextUnformatted("Mapa completo | Exteriores");
         ImGui::TextUnformatted("WASD  andar | Mouse  olhar");
         ImGui::TextUnformatted("Shift  correr | Enter  fechar menu");
     }
@@ -220,7 +308,24 @@ void SceneNuketown::DrawMenu()
 void SceneNuketown::AddPart(CPrimitives& mesh, glm::vec3 center, glm::vec3 size, glm::vec3 color,
     const glm::mat4& parent, Surface surface)
 {
-    parts.push_back({&mesh, glm::scale(glm::translate(parent, center), size), color, size, surface});
+    const glm::mat4 model = glm::scale(glm::translate(parent, center), size);
+    auto bounds = meshBounds.find(&mesh);
+    if (bounds == meshBounds.end())
+    {
+        glm::vec3 minimum(1.0e9f), maximum(-1.0e9f);
+        for (const PrimVertex& vertex : mesh.getVertices())
+        {
+            const glm::vec3 position(vertex.position[0], vertex.position[1], vertex.position[2]);
+            minimum = glm::min(minimum, position);
+            maximum = glm::max(maximum, position);
+        }
+        bounds = meshBounds.emplace(&mesh, MeshBounds{(minimum + maximum) * 0.5f,
+            (maximum - minimum) * 0.5f}).first;
+    }
+    parts.push_back({&mesh, model, color, size, surface,
+        glm::transpose(glm::inverse(glm::mat3(model))),
+        glm::vec3(model * glm::vec4(bounds->second.center, 1.0f)),
+        glm::length(size * bounds->second.half)});
 }
 
 void SceneNuketown::AddBox(glm::vec3 center, glm::vec3 size, glm::vec3 color, const glm::mat4& parent, Surface surface)
@@ -237,7 +342,10 @@ void SceneNuketown::AddBeam(glm::vec3 start, glm::vec3 end, float width, glm::ve
     const glm::vec3 forward = glm::cross(right, up);
     const glm::mat4 model(glm::vec4(right * width, 0.0f), glm::vec4(span, 0.0f),
         glm::vec4(forward * width, 0.0f), glm::vec4((start + end) * 0.5f, 1.0f));
-    parts.push_back({&box, model, color, {width, glm::length(span), width}, surface});
+    const glm::vec3 size(width, glm::length(span), width);
+    parts.push_back({&box, model, color, size, surface,
+        glm::transpose(glm::inverse(glm::mat3(model))),
+        (start + end) * 0.5f, glm::length(size) * 0.5f});
 }
 
 void SceneNuketown::AddPath(glm::vec2 start, glm::vec2 end, float width, float top, glm::vec3 color, Surface surface)
@@ -272,11 +380,9 @@ void SceneNuketown::AddFence(glm::vec2 start, glm::vec2 end, float height, glm::
 
 void SceneNuketown::BuildStreet()
 {
-    const glm::vec3 desert(0.66f, 0.57f, 0.43f);
     const glm::vec3 grass(0.36f, 0.43f, 0.24f);
     const glm::vec3 timber(0.34f, 0.28f, 0.20f);
 
-    AddBox({0.0f, -0.22f, -30.0f}, {280.0f, 0.36f, 240.0f}, desert, glm::mat4(1.0f), Surface::Dirt);
 
     // The oval is elongated along the approach road, as in the overhead reference.
     constexpr float centerZ = -0.85f;
@@ -326,13 +432,7 @@ void SceneNuketown::BuildStreet()
     AddBeam({-4.10f, 6.75f, 9.8f}, {-5.5f, 5.23f, 1.75f}, 0.025f, timber);
     AddBeam({-5.5f, 5.23f, 1.75f}, {-6.0f, 5.95f, -6.65f}, 0.025f, timber);
 
-    for (float x : {-65.0f, -43.0f, -20.0f, 4.0f, 29.0f, 57.0f, 76.0f})
-    {
-        const float height = 9.0f + std::abs(std::sin(x * 0.16f)) * 12.0f;
-        AddPart(pyramid, {x, -0.04f, -73.0f}, {37.0f, height, 27.0f}, {0.65f, 0.54f, 0.40f});
-    }
-    AddPart(pyramid, {36.0f, -0.04f, -53.0f}, {34.0f, 18.0f, 25.0f}, {0.67f, 0.55f, 0.42f});
-    AddPart(pyramid, {-36.0f, -0.04f, -55.0f}, {31.0f, 12.0f, 25.0f}, {0.62f, 0.52f, 0.40f});
+
 }
 
 void SceneNuketown::BuildSpawnYard()
@@ -362,180 +462,27 @@ void SceneNuketown::BuildSpawnYard()
     }
 }
 
-void SceneNuketown::BuildPerimeter()
-{
-    const glm::vec3 wood(0.52f, 0.40f, 0.28f);
-    const glm::vec3 cutFence(0.47f, 0.43f, 0.35f);
-    const glm::vec2 outline[] = {
-        {-28.75f, 2.7f}, {-29.75f, -10.5f}, {-24.1f, -17.2f}, {-17.2f, -17.2f},
-        {-10.45f, -14.7f}, {-4.85f, -16.8f}, {6.0f, -18.0f},
-        {14.8f, 20.0f}, {6.15f, 20.0f}, {-5.85f, 20.0f}, {-5.85f, 12.1f},
-        {-10.35f, 8.25f}, {-19.85f, 8.25f}
-    };
-    for (size_t index = 0; index < std::size(outline); ++index)
-    {
-        const bool eastCut = index == 6;
-        AddFence(outline[index], outline[(index + 1) % std::size(outline)], eastCut ? 2.7f : 2.15f,
-            eastCut ? cutFence : wood);
-    }
-
-    AddFence({-10.2f, 6.36f}, {-8.3f, 6.7f}, 1.03f, warmWhite);
-    AddFence({-7.1f, 7.0f}, {-6.6f, 9.02f}, 1.03f, warmWhite);
-}
-
-void SceneNuketown::BuildHouses()
-{
-    const glm::vec3 mint(0.26f, 0.60f, 0.47f);
-    const glm::vec3 blueGray(0.67f, 0.75f, 0.72f);
-    const glm::vec3 roof(0.32f, 0.37f, 0.36f);
-    const glm::vec3 wood(0.57f, 0.47f, 0.33f);
-    const glm::vec3 brickRed(0.55f, 0.28f, 0.23f);
-    const glm::vec3 recess(0.14f, 0.19f, 0.18f);
-    constexpr float houseYaw = 68.0f;
-    const glm::vec2 houseCenter(-14.1f, -6.4f);
-    const glm::mat4 house = PlaceInMap({houseCenter.x, 0.0f, houseCenter.y}, houseYaw);
-    traversal.AddObstacle(houseCenter, {3.75f, 4.60f}, houseYaw);
-
-    // Separate frame bars leave the glass slightly recessed behind their front edge.
-    const auto addWindow = [this, &recess](const glm::mat4& parent, glm::vec3 center,
-        float width, float height, float yaw)
-    {
-        const glm::mat4 frame = glm::rotate(glm::translate(parent, center),
-            glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));
-        AddBox({0.0f, 0.0f, 0.0f}, {width + 0.35f, height + 0.28f, 0.06f}, recess, frame);
-        AddBox({0.0f, 0.0f, 0.075f}, {width, height, 0.035f}, windowGlass, frame, Surface::Glass);
-        for (float side : {-1.0f, 1.0f})
-        {
-            AddBox({side * (width * 0.5f + 0.075f), 0.0f, 0.09f},
-                {0.15f, height + 0.23f, 0.16f}, warmWhite, frame, Surface::Paint);
-            AddBox({0.0f, side * (height * 0.5f + 0.0575f), 0.09f},
-                {width, 0.115f, 0.16f}, warmWhite, frame, Surface::Paint);
-        }
-        AddBox({0.0f, 0.0f, 0.115f}, {0.055f, height, 0.08f}, warmWhite, frame, Surface::Paint);
-        AddBox({0.0f, -0.055f, 0.115f}, {width, 0.045f, 0.08f}, warmWhite, frame, Surface::Paint);
-        AddBox({0.0f, -height * 0.5f - 0.14f, 0.125f},
-            {width + 0.43f, 0.095f, 0.34f}, warmWhite * 0.96f, frame, Surface::Paint);
-        AddBox({0.0f, height * 0.5f + 0.145f, 0.07f},
-            {width + 0.37f, 0.045f, 0.21f}, warmWhite, frame, Surface::Paint);
-    };
-
-    AddBox({0.0f, 1.30f, 0.0f}, {7.50f, 2.60f, 9.20f}, mint, house, Surface::Siding);
-    AddBox({0.0f, 3.84f, 0.0f}, {7.50f, 2.48f, 9.20f}, blueGray, house, Surface::Siding);
-    AddBox({0.0f, 2.63f, 0.0f}, {7.60f, 0.23f, 9.29f}, warmWhite, house, Surface::Paint);
-    AddPart(pyramid, {0.0f, 5.02f, 0.0f}, {8.1f, 1.22f, 9.90f}, roof, house, Surface::Roof);
-    AddBox({0.0f, 5.02f, 0.0f}, {7.91f, 0.12f, 9.65f}, warmWhite, house, Surface::Paint);
-    for (float side : {-1.0f, 1.0f})
-    {
-        const float windowYaw = side > 0.0f ? 0.0f : 180.0f;
-        for (float x : {-1.95f, 1.90f})
-            addWindow(house, {x, 3.92f, side * 4.68f}, 1.78f, 0.84f, windowYaw);
-        addWindow(house, {1.46f, 1.38f, side * 4.68f}, 2.09f, 0.91f, windowYaw);
-        addWindow(house, {side * 3.80f, 3.71f, -1.80f}, 1.48f, 0.82f, side * 90.0f);
-
-        const glm::mat4 door = glm::rotate(glm::translate(house,
-            {-1.26f, 1.13f, side * 4.68f}), glm::radians(windowYaw), {0.0f, 1.0f, 0.0f});
-        AddBox({0.0f, 0.0f, 0.0f}, {1.13f, 2.19f, 0.09f}, recess, door);
-        AddBox({0.0f, 0.0f, 0.05f}, {0.97f, 2.07f, 0.065f}, wood, door, Surface::Wood);
-        for (float edge : {-1.0f, 1.0f})
-            AddBox({edge * 0.535f, 0.0f, 0.055f}, {0.10f, 2.19f, 0.15f},
-                warmWhite, door, Surface::Paint);
-        AddBox({0.0f, 1.09f, 0.055f}, {1.17f, 0.11f, 0.15f}, warmWhite, door, Surface::Paint);
-        for (float y : {-0.47f, 0.43f})
-            AddBox({0.0f, y, 0.092f}, {0.69f, 0.68f, 0.025f}, wood * 0.88f, door, Surface::Wood);
-        AddBox({0.35f, -0.03f, 0.105f}, {0.07f, 0.16f, 0.022f}, {0.48f, 0.43f, 0.29f}, door);
-        AddPart(sphere, {0.35f, -0.03f, 0.14f}, {0.038f, 0.038f, 0.038f},
-            {0.63f, 0.57f, 0.38f}, door);
-
-        // Painted corner boards finish the siding without changing the house outline.
-        for (float x : {-3.77f, 3.77f})
-            AddBox({x, 2.55f, side * 4.61f}, {0.12f, 4.86f, 0.10f},
-                warmWhite, house, Surface::Paint);
-    }
-    AddBox({-1.35f, 0.09f, -4.96f}, {1.68f, 0.18f, 0.59f}, concrete, house, Surface::Concrete);
-
-    const glm::vec3 garageCenter = glm::vec3(house * glm::vec4(-5.62f, 0.0f, 1.78f, 1.0f));
-    const glm::mat4 garage = PlaceInMap(garageCenter, houseYaw);
-    traversal.AddObstacle({garageCenter.x, garageCenter.z}, {2.23f, 3.24f}, houseYaw);
-    AddBox({0.0f, 1.39f, 0.0f}, {4.46f, 2.78f, 6.48f}, blueGray, garage, Surface::Siding);
-    AddPart(pyramid, {0.0f, 2.76f, 0.0f}, {4.96f, 0.95f, 6.94f}, roof, garage, Surface::Roof);
-    AddBox({0.0f, 2.76f, 0.0f}, {4.79f, 0.11f, 6.75f}, warmWhite, garage, Surface::Paint);
-    AddBox({0.0f, 1.21f, 3.28f}, {3.43f, 2.22f, 0.095f}, recess, garage);
-    AddBox({0.0f, 1.21f, 3.34f}, {3.16f, 2.02f, 0.062f},
-        {0.39f, 0.44f, 0.39f}, garage, Surface::Paint);
-    for (float side : {-1.0f, 1.0f})
-        AddBox({side * 1.67f, 1.21f, 3.37f}, {0.15f, 2.23f, 0.12f},
-            warmWhite, garage, Surface::Paint);
-    AddBox({0.0f, 2.31f, 3.37f}, {3.49f, 0.13f, 0.12f}, warmWhite, garage, Surface::Paint);
-    for (float y = 0.35f; y < 2.15f; y += 0.36f)
-        AddBox({0.0f, y, 3.39f}, {3.15f, 0.035f, 0.04f}, blueGray, garage, Surface::Paint);
-    for (float x : {-1.05f, -0.35f, 0.35f, 1.05f})
-    {
-        AddBox({x, 1.99f, 3.39f}, {0.50f, 0.26f, 0.035f}, warmWhite, garage, Surface::Paint);
-        AddBox({x, 1.99f, 3.415f}, {0.40f, 0.16f, 0.025f}, windowGlass, garage, Surface::Glass);
-    }
-    AddBox({0.0f, 2.48f, 3.34f}, {0.34f, 0.14f, 0.12f}, {1.0f, 0.84f, 0.53f}, garage);
-    AddBox({0.0f, 0.017f, 4.53f}, {3.82f, 0.045f, 2.72f}, concrete, garage, Surface::Concrete);
-    garageLampPosition = glm::vec3(garage * glm::vec4(0.0f, 2.58f, 3.54f, 1.0f));
-
-    // A low north-side exterior frames the plaza without extending the route.
-    const glm::mat4 identity(1.0f);
-    AddBox({-0.9f, 1.31f, -14.88f}, {6.2f, 2.62f, 2.7f}, brickRed, identity, Surface::Siding);
-    AddBox({-0.9f, 2.70f, -14.88f}, {6.45f, 0.18f, 2.97f}, warmWhite, identity, Surface::Paint);
-    addWindow(identity, {-2.36f, 1.46f, -13.49f}, 2.02f, 1.12f, 0.0f);
-    AddBox({0.72f, 1.20f, -13.50f}, {1.53f, 2.34f, 0.11f},
-        {0.65f, 0.31f, 0.26f}, identity, Surface::Paint);
-    traversal.AddObstacle({-0.9f, -14.88f}, {3.1f, 1.35f});
-}
-
-void SceneNuketown::BuildClockTower()
-{
-    const glm::vec3 steel(0.39f, 0.35f, 0.28f);
-    const glm::vec3 clockFace(0.77f, 0.75f, 0.66f);
-    const glm::vec3 hands(0.18f, 0.18f, 0.16f);
-    constexpr float x = 2.6f;
-    constexpr float z = -11.50f;
-    traversal.AddObstacle({x, z}, {1.88f, 0.17f});
-
-    for (float side : {-1.0f, 1.0f})
-        AddBeam({x + side * 1.80f, 0.25f, z}, {x + side * 0.72f, 9.75f, z}, 0.17f, steel);
-
-    const auto halfWidth = [](float y) { return 1.80f - (y - 0.25f) * 1.08f / 9.50f; };
-    for (float baseY : {1.1f, 3.25f, 5.4f, 7.55f})
-    {
-        const float topY = baseY + 2.15f;
-        AddBeam({x - halfWidth(baseY), baseY, z}, {x + halfWidth(baseY), baseY, z}, 0.11f, steel);
-        AddBeam({x - halfWidth(baseY), baseY, z}, {x + halfWidth(topY), topY, z}, 0.09f, steel);
-        AddBeam({x + halfWidth(baseY), baseY, z}, {x - halfWidth(topY), topY, z}, 0.09f, steel);
-    }
-
-    glm::mat4 dial = glm::translate(glm::mat4(1.0f), {x, 8.95f, z + 0.13f});
-    dial = glm::rotate(dial, glm::radians(90.0f), {1.0f, 0.0f, 0.0f});
-    AddPart(cylinder, {0.0f, 0.0f, 0.0f}, {1.29f, 0.28f, 1.29f}, steel, dial);
-    AddPart(cylinder, {0.0f, 0.16f, 0.0f}, {1.15f, 0.08f, 1.15f}, clockFace, dial);
-    for (int tick = 0; tick < 12; ++tick)
-    {
-        const float angle = glm::radians(30.0f * tick);
-        const glm::vec3 direction(std::cos(angle), std::sin(angle), 0.0f);
-        const glm::vec3 center(x, 8.95f, z + 0.35f);
-        AddBeam(center + direction * 0.91f, center + direction * 1.04f, 0.058f, hands);
-    }
-    AddBeam({x, 8.95f, z + 0.39f}, {x - 0.36f, 9.32f, z + 0.39f}, 0.09f, hands);
-    AddBeam({x, 8.95f, z + 0.39f}, {x + 0.19f, 9.67f, z + 0.39f}, 0.065f, hands);
-}
-
 void SceneNuketown::AddWheels(const glm::mat4& vehicle, float halfAxle, float radius, float frontZ, float rearZ)
 {
     for (float side : {-1.0f, 1.0f})
-    {
         for (float z : {frontZ, rearZ})
         {
-            glm::mat4 axle = glm::translate(vehicle, {side * halfAxle, radius + 0.04f, z});
-            axle = glm::rotate(axle, glm::radians(side * -90.0f), {0.0f, 0.0f, 1.0f});
-            AddPart(cylinder, {0.0f, 0.0f, 0.0f}, {radius, 0.37f, radius}, tireRubber, axle);
-            AddPart(cylinder, {0.0f, 0.20f, 0.0f}, {radius * 0.59f, 0.07f, radius * 0.59f},
-                {0.51f, 0.47f, 0.37f}, axle);
+            const glm::mat4 wheel = glm::rotate(glm::translate(vehicle, {side * halfAxle, radius + 0.05f, z}),
+                glm::radians(side * 90.0f), {0.0f, 1.0f, 0.0f});
+            AddPart(tire, {0.0f, 0.0f, 0.0f}, {radius, radius, 0.56f}, {0.08f, 0.085f, 0.09f}, wheel, Surface::Tire);
+            const glm::mat4 hub = glm::rotate(glm::translate(wheel, {0.0f, 0.0f, 0.10f}),
+                glm::radians(90.0f), {1.0f, 0.0f, 0.0f});
+            AddPart(cylinder, {0.0f, 0.0f, 0.0f}, {radius * 0.72f, 0.055f, radius * 0.72f},
+                {0.51f, 0.54f, 0.52f}, hub, Surface::Chrome);
+            AddPart(sphere, {0.0f, 0.0f, 0.15f}, {radius * 0.48f, radius * 0.48f, 0.035f},
+                {0.67f, 0.69f, 0.66f}, wheel, Surface::Chrome);
+            for (int bolt = 0; bolt < 5; ++bolt)
+            {
+                const float angle = glm::radians(bolt * 72.0f);
+                AddPart(sphere, {std::cos(angle) * radius * 0.28f, std::sin(angle) * radius * 0.28f, 0.19f},
+                    {0.018f, 0.018f, 0.012f}, {0.69f, 0.70f, 0.67f}, wheel, Surface::Chrome);
+            }
         }
-    }
 }
 
 void SceneNuketown::BuildBus()
@@ -544,7 +491,7 @@ void SceneNuketown::BuildBus()
     constexpr float heading = 12.0f;
     constexpr float busLength = 8.20f;
     const glm::mat4 vehicle = PlaceInMap({center.x, 0.0f, center.y}, heading);
-    AddPart(cylinder, {0.0f, 0.051f, 0.0f}, {1.83f, 0.012f, 4.53f}, {0.19f, 0.21f, 0.21f}, vehicle);
+    AddPart(cylinder, {0.0f, 0.051f, 0.0f}, {1.83f, 0.012f, 4.53f}, {0.19f, 0.21f, 0.21f}, vehicle, Surface::Shadow);
 
     std::error_code fileError;
     if (std::filesystem::is_regular_file(busAssetPath, fileError))
@@ -601,41 +548,4 @@ void SceneNuketown::BuildBus()
         }
     }
     AddWheels(vehicle, 1.13f, 0.53f, 2.43f, -2.65f);
-}
-
-void SceneNuketown::BuildTruck()
-{
-    const glm::mat4 vehicle = PlaceInMap({2.54f, 0.0f, -2.85f}, 13.0f);
-    const glm::vec3 collisionCenter = glm::vec3(vehicle * glm::vec4(0.0f, 0.0f, -0.44f, 1.0f));
-    traversal.AddObstacle({collisionCenter.x, collisionCenter.z}, {1.39f, 3.77f}, 13.0f);
-    const glm::vec3 red(0.62f, 0.22f, 0.20f);
-    const glm::vec3 silver(0.60f, 0.63f, 0.59f);
-    const glm::vec3 bumper(0.34f, 0.36f, 0.34f);
-    AddPart(cylinder, {0.0f, 0.051f, -0.15f}, {1.80f, 0.012f, 4.41f}, {0.19f, 0.21f, 0.21f}, vehicle);
-    AddBox({0.0f, 0.73f, -0.4f}, {2.45f, 0.28f, 7.20f}, tireRubber, vehicle);
-    AddBox({0.0f, 2.19f, -1.75f}, {2.72f, 2.65f, 4.72f}, silver, vehicle);
-    AddBox({0.0f, 3.55f, -1.75f}, {2.78f, 0.17f, 4.78f}, {0.71f, 0.72f, 0.65f}, vehicle);
-    for (float side : {-1.0f, 1.0f})
-    {
-        for (float y = 1.12f; y < 3.55f; y += 0.25f)
-            AddBox({side * 1.375f, y, -1.75f}, {0.035f, 0.048f, 4.64f}, {0.55f, 0.57f, 0.53f}, vehicle);
-    }
-
-    AddBox({0.0f, 1.35f, 1.88f}, {2.47f, 1.32f, 2.51f}, red, vehicle);
-    AddBox({0.0f, 2.19f, 1.57f}, {2.34f, 0.88f, 1.60f}, red, vehicle);
-    AddBox({0.0f, 2.67f, 1.61f}, {2.46f, 0.19f, 1.78f}, warmWhite, vehicle);
-    AddBox({0.0f, 2.20f, 2.40f}, {2.13f, 0.54f, 0.12f}, warmWhite, vehicle);
-    AddBox({0.0f, 1.18f, 3.164f}, {1.15f, 0.92f, 0.13f}, bumper, vehicle);
-    AddBox({0.0f, 1.16f, 3.246f}, {0.92f, 0.75f, 0.058f}, tireRubber, vehicle);
-    AddBox({0.0f, 0.58f, 3.19f}, {2.63f, 0.21f, 0.26f}, bumper, vehicle);
-    for (float x = -0.38f; x <= 0.39f; x += 0.12f)
-        AddBox({x, 1.16f, 3.284f}, {0.038f, 0.73f, 0.042f}, bumper, vehicle);
-
-    for (float side : {-1.0f, 1.0f})
-    {
-        AddBox({side * 0.51f, 2.20f, 2.478f}, {0.93f, 0.41f, 0.062f}, windowGlass, vehicle, Surface::Glass);
-        AddBox({side * 1.184f, 2.20f, 1.68f}, {0.065f, 0.52f, 0.91f}, windowGlass, vehicle, Surface::Glass);
-        AddPart(sphere, {side * 1.02f, 1.03f, 3.18f}, {0.19f, 0.19f, 0.10f}, warmWhite, vehicle);
-    }
-    AddWheels(vehicle, 1.16f, 0.56f, 2.14f, -2.80f);
 }

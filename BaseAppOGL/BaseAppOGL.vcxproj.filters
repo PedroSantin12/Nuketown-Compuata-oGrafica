@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="Engine\CAsset.cpp">
@@ -59,6 +59,33 @@
       <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="Scenes\Nuketown\SceneNuketown.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownHouses.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownLandmarks.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownYards.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownGardens.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownVehicles.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownBoundary.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownRendering.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownLandscape.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownLighting.cpp">
       <Filter>Scenes\Nuketown</Filter>
     </ClCompile>
   </ItemGroup>
@@ -176,6 +203,18 @@
     <None Include="Scenes\Nuketown\Nuketown.frag">
       <Filter>Scenes\Nuketown</Filter>
     </None>
+    <None Include="Scenes\Nuketown\Assets\Signs\NUKETOWN.BMP">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Signs\POLICE.BMP">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Signs\DELIVERY.BMP">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Signs\MakeLabels.py">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
     <None Include="Scenes\Nuketown\Assets\Bus\MakeBus.ms">
       <Filter>Scenes\Nuketown</Filter>
     </None>
@@ -199,6 +238,18 @@
     </None>
     <None Include="Scenes\Common\Light.vert">
       <Filter>Scenes\Common</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\NuketownSky.vert">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\NuketownSky.frag">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\NuketownShadow.vert">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\NuketownShadow.frag">
+      <Filter>Scenes\Nuketown</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
