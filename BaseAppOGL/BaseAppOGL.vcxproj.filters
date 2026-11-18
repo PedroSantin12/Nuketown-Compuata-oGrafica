@@ -114,6 +114,9 @@
     <ClInclude Include="Engine\CSceneManager.h">
       <Filter>Engine</Filter>
     </ClInclude>
+    <ClInclude Include="Engine\CWindowMode.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\CTextures.h">
       <Filter>Engine</Filter>
     </ClInclude>
@@ -219,6 +222,21 @@
       <Filter>Scenes\Nuketown</Filter>
     </None>
     <None Include="Scenes\Nuketown\Assets\Bus\BUSPAINT.BMP">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Bus\BUS.3ds">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Bus\Bus.max">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Bus\BUSLABEL.BMP">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Bus\MakeBusLabels.py">
+      <Filter>Scenes\Nuketown</Filter>
+    </None>
+    <None Include="Scenes\Nuketown\Assets\Bus\README.md">
       <Filter>Scenes\Nuketown</Filter>
     </None>
     <None Include="Scenes\Common\SkyBox.frag">

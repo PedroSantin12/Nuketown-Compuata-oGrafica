@@ -25,7 +25,7 @@ private:
     // These values are shared with the surface branches in Nuketown.frag.
     enum class Surface { Solid, Asphalt, Concrete, Grass, Dirt, Siding, Wood, Roof, Glass, Paint,
         Sign, PoliceMark, Delivery, Stone, VerticalSiding, Shadow, VehiclePaint, Chrome, VehicleGlass, Tire,
-        Emissive, Sand, Water, Mountains, Foliage };
+        Emissive, Sand, Mountains };
 
     struct Part
     {
@@ -51,7 +51,6 @@ private:
     void AddFence(glm::vec2 start, glm::vec2 end, float height, glm::vec3 color);
     void BuildStreet();
     void BuildEnvironment();
-    void BuildPalm(glm::vec2 position, float height, float yaw);
     void BuildStreetLighting();
     void BakeStreetLightMap();
     void BuildSpawnYard();
@@ -64,22 +63,21 @@ private:
     void BuildEastYard();
     void BuildWestGarden();
     void BuildTestSiteFixtures();
-    void BuildNorthBoundary();
     void BuildLandmarks();
     void BuildParkedCar(glm::vec2 center, float yaw, glm::vec3 color, bool police = false);
     void BuildClockTower();
-    glm::vec3 GetViewPosition() const;
-    void DrawAvatar();
+    void ToggleFlyCamera();
+    void ResetFlyCamera();
+    void MoveFlyCamera(glm::vec3 direction, float deltaTime, bool accelerated);
     void DrawMenu();
     void InitializeRenderingResources();
+    static glm::vec3 SunDirection();
     void RenderShadowMap();
     void BakeSkyEnvironment();
     void DrawSky(const glm::mat4& viewProjection, glm::vec3 viewPosition);
 
     CCamera camera;
-    bool thirdPerson = false;
     bool menuOpen = false;
-    float cameraDistance = 3.4f;
     NuketownTraversal traversal;
     glm::vec3 garageLampPosition;
     glm::vec3 secondGarageLampPosition;
@@ -95,8 +93,6 @@ private:
     CPrimitives truckHood;
     CPrimitives tire;
     CPrimitives desertBasin;
-    CPrimitives riverRibbon;
-    CPrimitives palmFrond;
     struct MeshBounds { glm::vec3 center; glm::vec3 half; };
     std::unordered_map<const CPrimitives*, MeshBounds> meshBounds;
     unsigned int shadowFramebuffer = 0;
@@ -110,4 +106,7 @@ private:
     unsigned int environmentTexture = 0;
     std::vector<glm::vec3> streetLightPositions;
     unsigned int streetLightTexture = 0;
+    bool flyCameraEnabled = false;
+    CCamera savedWalkingCamera;
+    CCamera inspectionCamera;
 };

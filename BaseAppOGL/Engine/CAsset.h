@@ -36,7 +36,7 @@ public:
     unsigned int VAO;
 
     Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures,
-         glm::vec3 diffuseColor = glm::vec3(1.0f));
+         glm::vec3 diffuseColor = glm::vec3(1.0f), int surface = 0);
     void DeleteBuffers();
     void Draw(unsigned int shaderProgram);
     void DrawWithShadows(unsigned int shaderProgram);
@@ -57,6 +57,7 @@ public:
 private:
     unsigned int VBO, EBO;
     glm::vec3 diffuseColor;
+    int surface = 0;
     void setupMesh();
 
     unsigned int normalsVAO = 0;

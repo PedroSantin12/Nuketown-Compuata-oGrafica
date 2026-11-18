@@ -7,8 +7,8 @@
 
 // Mesh Implementation
 Mesh::Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures,
-    glm::vec3 diffuseColor)
-    : vertices(vertices), indices(indices), textures(textures), diffuseColor(diffuseColor)
+    glm::vec3 diffuseColor, int surface)
+    : vertices(vertices), indices(indices), textures(textures), diffuseColor(diffuseColor), surface(surface)
 {
     setupMesh();
 }
@@ -63,6 +63,7 @@ void Mesh::Draw(unsigned int shaderProgram)
     }
     glUniform1i(glGetUniformLocation(shaderProgram, "uHasDiffuseMap"), hasDiffuseMap);
     glUniform3fv(glGetUniformLocation(shaderProgram, "uMaterialColor"), 1, &diffuseColor[0]);
+    glUniform1i(glGetUniformLocation(shaderProgram, "uAssetSurface"), surface);
 
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
@@ -232,7 +233,7 @@ void CAsset::loadModel(const std::string& path)
     const aiScene* scene = importer.ReadFile(path,
         aiProcess_Triangulate | 
         aiProcess_FlipUVs | 
-        aiProcess_GenNormals |
+        aiProcess_GenSmoothNormals |
         aiProcess_CalcTangentSpace | 
         aiProcess_PreTransformVertices |
         aiProcess_RemoveComponent
@@ -302,9 +303,22 @@ Mesh CAsset::processMesh(aiMesh* mesh, const aiScene* scene)
     }
 
     glm::vec3 diffuseColor(1.0f);
+    int surface = 0;
     if (mesh->mMaterialIndex < scene->mNumMaterials)
     {
         aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+        aiString materialName;
+        if (material->Get(AI_MATKEY_NAME, materialName) == AI_SUCCESS)
+        {
+            // Only the bus's explicitly named materials opt into the scene's
+            // vehicle finish. Other imported class assets keep their own shading.
+            const std::string name(materialName.C_Str());
+            if (name.rfind("BusPaint", 0) == 0) surface = 16;
+            else if (name.rfind("BusChrom", 0) == 0) surface = 17;
+            else if (name.rfind("BusGlass", 0) == 0) surface = 18;
+            else if (name.rfind("BusRubbr", 0) == 0) surface = 19;
+            else if (name.rfind("BusLight", 0) == 0) surface = 20;
+        }
         aiColor3D diffuse;
         if (material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse) == AI_SUCCESS)
             diffuseColor = {diffuse.r, diffuse.g, diffuse.b};
@@ -320,7 +334,7 @@ Mesh CAsset::processMesh(aiMesh* mesh, const aiScene* scene)
 	numIndices = indices.size();
     numFaces = mesh->mNumFaces;
 
-    return Mesh(vertices, indices, textures, diffuseColor);
+    return Mesh(vertices, indices, textures, diffuseColor, surface);
 }
 
 std::vector<Texture> CAsset::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName) 

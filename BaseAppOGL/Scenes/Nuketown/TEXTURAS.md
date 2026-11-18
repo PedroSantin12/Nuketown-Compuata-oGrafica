@@ -22,10 +22,13 @@ As janelas têm moldura, caixilhos e peitoril modelados, vidro recuado e reflexo
 por cubemap do céu. O céu procedural é desenhado uma vez nas seis faces de uma
 textura de ambiente 256x256, com mipmaps; o mesmo cubemap é reutilizado no fundo,
 vidros, cromados e pintura dos veículos. Isso evita recalcular nuvens por fragmento.
-Os interiores permanecem fechados, sem refração ou transparência para dentro da casa.
+Os cômodos principais das casas permanecem fechados, sem refração ou transparência
+para seu interior. As duas garagens têm aberturas reais na geometria e são acessíveis.
 
-O ônibus mantém seus materiais e UVs importados do arquivo .3DS, independentes
-dos materiais do terreno e da casa.
+O ônibus remodelado no 3ds Max mantém seus materiais e UVs importados do arquivo
+.3DS. Pintura, vidro, cromo e borracha recebem tratamento de material no shader,
+integrando a aparência do ônibus aos demais veículos. O modelo editável `.max`
+e a exportação `.3ds` acompanham o projeto.
 
 ## Expansão para o mapa completo
 
@@ -37,9 +40,9 @@ As paredes amarelas usam frisos verticais; as verdes mantêm frisos horizontais.
 
 As sombras de contato dos veículos mantêm mistura alfa e máscara radial suave.
 A iluminação agora também utiliza um depth map 2048x2048 do sol, com filtro PCF
-3x3. Ele é calculado uma vez para os objetos estáticos. Não é um lightmap produzido
-no 3ds Max; é um passe de profundidade em OpenGL. O avatar móvel não participa
-desse mapa estático.
+bilinear de quatro amostras, com correção da profundidade nas faces inclinadas.
+Ele é calculado uma vez para os objetos estáticos. Não é um lightmap produzido
+no 3ds Max; é um passe de profundidade em OpenGL.
 
 ## Geometria e materiais dos veículos
 
@@ -48,7 +51,20 @@ e pneus toroidais. O caminhão usa as mesmas primitivas, com capô perfilado e s
 rodas detalhadas. As rotinas estão em CPrimitives.cpp; usam os mesmos buffers e
 atributos de posição, normal e UV da base. Não foram adicionadas bibliotecas.
 As superfícies novas separam pintura automotiva, cromado, vidro e borracha.
-Os arquivos do ônibus e seus materiais importados permanecem preservados.
+O ônibus utiliza o modelo importado do 3ds Max, com geometria e materiais revistos
+para acompanhar o acabamento dos carros e do caminhão.
+
+## Garagens acessíveis
+
+As garagens verde e amarela são cascos de paredes, piso e teto, com a entrada
+principal aberta e uma porta aberta nos fundos. Caixas e detalhes internos ficam
+fora da passagem central. Os colisores acompanham paredes e objetos, permitindo
+atravessar cada garagem; a casa principal continua sólida e fechada.
+
+As luminárias internas combinam superfícies emissivas com fontes de luz para
+iluminar o piso, as caixas e as paredes. Essa iluminação usa o shader da cena.
+Ela não representa um bake de sombras produzido no 3ds Max, que permanece uma
+etapa separada dos mapas de iluminação e profundidade gerados pela aplicação.
 
 
 ## Paisagem externa e fechamento do terreno
@@ -60,11 +76,14 @@ seu centro para perto das casas. O chão externo é amplo, e a névoa dos materi
 de paisagem converge para a cor horizontal do cubemap antes de sua borda distante.
 
 A areia tem variações discretas de cor e grão. As montanhas combinam rocha e terra
-conforme a inclinação e a altura. Um pequeno rio decorativo, com ondas suaves e
-reflexos do cubemap, e quatro palmeiras ficam além do perímetro. Esses elementos
-ambientam o deserto e não ampliam a área de circulação do jogador. As cercas mais
-baixas permitem enxergar a paisagem sem remover os colisores que fecham o mapa.
+conforme a inclinação e a altura. A paisagem além do perímetro contém apenas o
+terreno desértico e o anel montanhoso, mantendo os postes e refletores do local.
+As cercas mais baixas permitem enxergar a paisagem sem remover os colisores que
+fecham o mapa. A câmera permanece em primeira pessoa.
 A traseira do caminhão é fechada por painéis metálicos.
+A fachada isolada ao fundo da praça e seu colisor foram removidos; a cerca
+continua fechando o mapa. Os carros estacionados foram reposicionados para
+liberar a entrada da garagem verde e ampliar a passagem junto à cerca no fim da rua.
 
 ## Luzes dos postes e refletores
 
@@ -82,4 +101,10 @@ a contribuição das luminárias: não é uma textura de sombra nem um lightmap 
 3ds Max.
 
 As sombras solares continuam usando o mapa de profundidade estático de 2048 x 2048
-em OpenGL, com PCF 3 x 3. Esse passe é independente do mapa RGB16F das luminárias.
+em OpenGL, com PCF bilinear de quatro amostras. Esse passe é independente do mapa RGB16F das luminárias.
+
+## Sol visível
+
+O disco solar no céu usa a mesma direção da iluminação das superfícies e do mapa
+de profundidade das sombras. Ele faz parte do céu distante e mantém sua direção
+no mundo quando o jogador anda pelo mapa.

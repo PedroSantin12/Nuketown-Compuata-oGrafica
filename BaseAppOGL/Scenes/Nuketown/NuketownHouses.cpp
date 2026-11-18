@@ -119,28 +119,119 @@ void SceneNuketown::BuildHouse(glm::vec2 center, float yaw, bool yellow)
 
     const glm::vec3 garageCenter = glm::vec3(house * glm::vec4(-5.62f, 0.0f, 1.78f, 1.0f));
     const glm::mat4 garage = PlaceHouse({garageCenter.x, garageCenter.z}, yaw);
-    traversal.AddObstacle({garageCenter.x, garageCenter.z}, {2.23f, 3.24f}, yaw);
-    AddBox({0.0f, 1.39f, 0.0f}, {4.46f, 2.78f, 6.48f}, upper, garage, wall);
-    if (yellow)
-        AddBox({0.0f, 0.30f, 0.0f}, {4.54f, 0.60f, 6.56f}, {0.59f, 0.54f, 0.40f}, garage, Surface::Stone);
-    AddPart(pyramid, {0.0f, 2.76f, 0.0f}, {4.96f, 0.95f, 6.94f}, roof, garage, Surface::Roof);
-    AddBox({0.0f, 2.76f, 0.0f}, {4.79f, 0.11f, 6.75f}, houseTrim, garage, Surface::Paint);
-    AddBox({0.0f, 1.21f, 3.28f}, {3.43f, 2.22f, 0.095f}, recess, garage);
-    AddBox({0.0f, 1.21f, 3.34f}, {3.16f, 2.02f, 0.062f},
-        yellow ? glm::vec3(0.62f, 0.59f, 0.44f) : glm::vec3(0.39f, 0.44f, 0.39f), garage, Surface::Paint);
-    for (float side : {-1.0f, 1.0f})
-        AddBox({side * 1.67f, 1.21f, 3.37f}, {0.15f, 2.23f, 0.12f}, houseTrim, garage, Surface::Paint);
-    AddBox({0.0f, 2.31f, 3.37f}, {3.49f, 0.13f, 0.12f}, houseTrim, garage, Surface::Paint);
-    for (float y = 0.35f; y < 2.15f; y += 0.36f)
-        AddBox({0.0f, y, 3.39f}, {3.15f, 0.035f, 0.04f}, upper, garage, Surface::Paint);
-    for (float x : {-1.05f, -0.35f, 0.35f, 1.05f})
+    const auto garagePoint = [&garage](glm::vec3 point)
     {
-        AddBox({x, 1.99f, 3.39f}, {0.50f, 0.26f, 0.035f}, houseTrim, garage, Surface::Paint);
-        AddBox({x, 1.99f, 3.415f}, {0.40f, 0.16f, 0.025f}, houseGlass, garage, Surface::Glass);
+        return glm::vec3(garage * glm::vec4(point, 1.0f));
+    };
+    const auto garageSolid = [this, yaw, &garage, &garagePoint](glm::vec3 position,
+        glm::vec3 size, glm::vec3 color, Surface surface)
+    {
+        AddBox(position, size, color, garage, surface);
+        const glm::vec3 point = garagePoint(position);
+        traversal.AddObstacle({point.x, point.z}, {size.x * 0.5f, size.z * 0.5f}, yaw,
+            position.y - size.y * 0.5f, position.y + size.y * 0.5f);
+    };
+    const glm::vec3 interior(0.69f, 0.68f, 0.60f);
+    const glm::vec3 metal(0.43f, 0.48f, 0.46f);
+
+    // A thin shell replaces the solid block. The central aisle joins two real openings.
+    // The attached house overlaps 0.36 m of the original footprint on the right;
+    // its lining therefore stops before that solid house wall.
+    garageSolid({-2.13f, 1.39f, 0.0f}, {0.20f, 2.78f, 6.48f}, upper, wall);
+    garageSolid({1.82f, 1.39f, 0.0f}, {0.20f, 2.78f, 6.48f}, upper, wall);
+    AddBox({-2.024f, 1.35f, 0.0f}, {0.012f, 2.66f, 6.20f}, interior, garage, Surface::Paint);
+    AddBox({1.714f, 1.35f, 0.0f}, {0.012f, 2.66f, 6.20f}, interior, garage, Surface::Paint);
+    AddBox({-0.155f, 0.002f, 0.0f}, {4.35f, 0.040f, 6.48f},
+        houseConcrete * 0.83f, garage, Surface::Concrete);
+    garageSolid({-0.155f, 2.72f, 0.0f}, {4.35f, 0.12f, 6.48f}, interior, Surface::Paint);
+    AddPart(pyramid, {0.0f, 2.78f, 0.0f}, {4.96f, 0.95f, 6.94f}, roof, garage, Surface::Roof);
+    AddBox({0.0f, 2.78f, 0.0f}, {4.79f, 0.11f, 6.75f}, houseTrim, garage, Surface::Paint);
+
+    // The main entrance has a 3.70 m clear opening and a 2.32 m lintel.
+    for (float side : {-1.0f, 1.0f})
+    {
+        garageSolid({side * 2.04f, 1.16f, 3.24f}, {0.38f, 2.32f, 0.20f}, upper, wall);
+        AddBox({side * 1.93f, 1.16f, 3.365f}, {0.16f, 2.32f, 0.14f},
+            houseTrim, garage, Surface::Paint);
+        AddBox({side * 1.97f, 1.34f, 3.10f}, {0.045f, 2.26f, 0.045f}, metal, garage, Surface::Chrome);
+        AddBox({side * 1.97f, 2.50f, 1.39f}, {0.045f, 0.045f, 3.48f}, metal, garage, Surface::Chrome);
     }
-    AddBox({0.0f, 2.48f, 3.34f}, {0.34f, 0.14f, 0.12f}, {1.0f, 0.84f, 0.53f}, garage);
+    garageSolid({0.0f, 2.55f, 3.24f}, {4.46f, 0.46f, 0.20f}, upper, wall);
+    AddBox({0.0f, 2.36f, 3.365f}, {4.02f, 0.14f, 0.14f}, houseTrim, garage, Surface::Paint);
+
+    // A raised sectional gate rests beneath its tracks, safely above the player's head.
+    garageSolid({0.0f, 2.52f, 1.90f}, {3.70f, 0.10f, 2.55f},
+        yellow ? glm::vec3(0.62f, 0.59f, 0.44f) : glm::vec3(0.39f, 0.44f, 0.39f), Surface::Paint);
+    for (float z = 0.80f; z < 3.16f; z += 0.36f)
+        AddBox({0.0f, 2.462f, z}, {3.65f, 0.018f, 0.025f}, metal, garage, Surface::Chrome);
+
+    // A wide back doorway opens toward the yard, without a threshold collider.
+    constexpr float rearHalfOpening = 0.82f;
+    for (float side : {-1.0f, 1.0f})
+    {
+        garageSolid({side * 1.525f, 1.10f, -3.24f}, {1.41f, 2.20f, 0.20f}, upper, wall);
+        AddBox({side * 1.525f, 1.10f, -3.128f}, {1.41f, 2.20f, 0.018f}, interior, garage, Surface::Paint);
+        AddBox({side * (rearHalfOpening + 0.05f), 1.10f, -3.36f}, {0.10f, 2.20f, 0.15f},
+            houseTrim, garage, Surface::Paint);
+    }
+    garageSolid({0.0f, 2.49f, -3.24f}, {4.46f, 0.58f, 0.20f}, upper, wall);
+    AddBox({0.0f, 2.25f, -3.36f}, {1.94f, 0.10f, 0.15f}, houseTrim, garage, Surface::Paint);
+    const glm::mat4 openDoor = glm::rotate(glm::translate(garage, {-0.89f, 0.0f, -3.36f}),
+        glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    AddBox({0.79f, 1.10f, 0.0f}, {1.58f, 2.14f, 0.075f}, doorWood, openDoor, Surface::Wood);
+    for (float y : {0.61f, 1.57f})
+        AddBox({0.79f, y, 0.044f}, {1.30f, 0.70f, 0.018f}, doorWood * 0.86f, openDoor, Surface::Wood);
+    AddPart(sphere, {1.40f, 1.08f, 0.086f}, {0.040f, 0.040f, 0.040f},
+        {0.63f, 0.57f, 0.38f}, openDoor, Surface::Chrome);
+    const glm::vec3 openDoorCenter = garagePoint({-0.89f, 1.10f, -4.15f});
+    traversal.AddObstacle({openDoorCenter.x, openDoorCenter.z}, {0.79f, 0.045f},
+        yaw + 90.0f, 0.03f, 2.17f);
+    AddBox({0.0f, 0.007f, -3.70f}, {1.92f, 0.030f, 0.92f},
+        houseConcrete, garage, Surface::Concrete);
+
+    if (yellow)
+    {
+        const glm::vec3 stone(0.59f, 0.54f, 0.40f);
+        AddBox({-2.245f, 0.30f, 0.0f}, {0.04f, 0.60f, 6.48f}, stone, garage, Surface::Stone);
+        for (float side : {-1.0f, 1.0f})
+        {
+            AddBox({side * 2.04f, 0.30f, 3.355f}, {0.38f, 0.60f, 0.04f}, stone, garage, Surface::Stone);
+            AddBox({side * 1.525f, 0.30f, -3.355f}, {1.41f, 0.60f, 0.04f}, stone, garage, Surface::Stone);
+        }
+    }
+
+    // Crates stay against the walls; the aisle at local X=0 remains unobstructed.
+    const auto crate = [this, &garage, &garageSolid](glm::vec3 position, glm::vec3 size)
+    {
+        const glm::vec3 wood(0.57f, 0.42f, 0.25f);
+        garageSolid(position, size, wood, Surface::Wood);
+        for (float side : {-1.0f, 1.0f})
+        {
+            AddBox(position + glm::vec3(side * (size.x * 0.5f - 0.045f), 0.0f, size.z * 0.5f + 0.012f),
+                {0.075f, size.y, 0.025f}, wood * 0.78f, garage, Surface::Wood);
+            AddBox(position + glm::vec3(0.0f, side * (size.y * 0.5f - 0.045f), size.z * 0.5f + 0.018f),
+                {size.x, 0.075f, 0.025f}, wood * 0.78f, garage, Surface::Wood);
+        }
+    };
+    crate({-1.48f, 0.37f, -1.96f}, {0.84f, 0.70f, 0.88f});
+    crate({-1.48f, 0.96f, -1.96f}, {0.64f, 0.48f, 0.66f});
+    crate({1.18f, 0.40f, -1.99f}, {0.78f, 0.76f, 0.86f});
+    crate({-1.46f, 0.29f, 0.39f}, {0.76f, 0.54f, 0.72f});
+    garageSolid({1.30f, 0.64f, 0.37f}, {0.58f, 1.20f, 1.45f},
+        {0.60f, 0.46f, 0.28f}, Surface::Wood);
+    AddBox({1.30f, 1.27f, 0.37f}, {0.67f, 0.075f, 1.54f}, metal, garage, Surface::Paint);
+    AddBox({1.26f, 1.48f, 0.43f}, {0.38f, 0.34f, 0.47f},
+        {0.63f, 0.52f, 0.35f}, garage, Surface::Paint);
+    AddBox({1.26f, 1.48f, 0.43f}, {0.070f, 0.35f, 0.48f},
+        {0.81f, 0.75f, 0.59f}, garage, Surface::Paint);
+
+    AddBox({-0.16f, 2.61f, -0.15f}, {1.16f, 0.08f, 0.32f}, metal, garage, Surface::Paint);
+    AddBox({-0.16f, 2.558f, -0.15f}, {1.05f, 0.028f, 0.22f},
+        {1.0f, 0.85f, 0.60f}, garage, Surface::Emissive);
+    AddBox({0.0f, 2.52f, 3.37f}, {0.34f, 0.14f, 0.12f},
+        {1.0f, 0.84f, 0.53f}, garage, Surface::Emissive);
     AddBox({0.0f, 0.017f, 4.53f}, {3.82f, 0.045f, 2.72f}, houseConcrete, garage, Surface::Concrete);
-    const glm::vec3 lamp = glm::vec3(garage * glm::vec4(0.0f, 2.58f, 3.54f, 1.0f));
+    const glm::vec3 lamp = garagePoint({-0.16f, 2.48f, -0.15f});
     if (yellow)
         secondGarageLampPosition = lamp;
     else

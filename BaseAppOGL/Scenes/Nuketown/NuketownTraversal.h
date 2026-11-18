@@ -74,37 +74,6 @@ public:
         return true;
     }
 
-    glm::vec3 ConstrainCamera(glm::vec3 target, glm::vec3 desired) const
-    {
-        const glm::vec3 span = desired - target;
-        const float distance = glm::length(span);
-        constexpr float rayBodyHeight = 0.10f;
-        const auto clear = [this](glm::vec3 point)
-        {
-            return IsWalkableAt({point.x, point.z}, point.y - rayBodyHeight * 0.5f,
-                rayBodyHeight);
-        };
-        if (distance < epsilon || !clear(target))
-            return target;
-
-        constexpr float maxStep = 0.08f;
-        constexpr float boundaryMargin = 0.06f;
-        const int steps = 1 + static_cast<int>(distance / maxStep);
-        const glm::vec3 direction = span / distance;
-        float safeDistance = 0.0f;
-
-        // Test the actual 3D ray so elevated rails do not block a ground camera.
-        for (int index = 1; index <= steps; ++index)
-        {
-            const float sampleDistance = distance * static_cast<float>(index) / steps;
-            const glm::vec3 sample = target + direction * sampleDistance;
-            if (!clear(sample))
-                return target + direction * glm::max(0.0f, safeDistance - boundaryMargin);
-            safeDistance = sampleDistance;
-        }
-        return desired;
-    }
-
     glm::vec2 Move(glm::vec2 position, glm::vec2 delta) const
     {
         // Preserve the original ground-only API for existing callers.

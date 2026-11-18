@@ -17,8 +17,8 @@ uniform vec3 uObjectSize;
 uniform vec3 uSunDirection;
 uniform int uStreetLightCount;
 uniform vec3 uStreetLightPositions[8];
-uniform float uTime;
 uniform int uSurface;
+uniform int uAssetSurface;
 uniform bool uUseAssetMaterials;
 uniform bool uHasDiffuseMap;
 uniform vec3 uMaterialColor;
@@ -159,9 +159,7 @@ vec3 surfaceColor()
         return uColor * (0.88 + dune * 0.19 + (soilValue - 0.37) * 0.13
             + (sandGrain - 0.5) * 0.07);
     }
-    if (uSurface == 22)
-        return uColor;
-    if (uSurface == 23) // Rocky slopes and sandy shelves remain matte.
+    if (uSurface == 22) // Rocky slopes and sandy shelves remain matte.
     {
         vec3 rock = texture(uStoneMap, ground * 0.045).rgb;
         vec3 soil = texture(uSoilMap, ground * 0.085).rgb;
@@ -173,11 +171,6 @@ vec3 surfaceColor()
         vec3 sandy = uColor * vec3(1.08, 1.04, 0.94) * (0.86 + soilValue * 0.42);
         vec3 rocky = uColor * vec3(0.94, 0.97, 1.02) * (0.77 + rockValue * 0.55);
         return mix(sandy, rocky, exposed) * (0.97 + 0.06 * noise(ground * 0.17));
-    }
-    if (uSurface == 24) // Fronds and sparse desert shrubs.
-    {
-        float leaf = noise(p * vec2(11.0, 3.0));
-        return uColor * (0.88 + leaf * 0.19);
     }
     return uColor;
 }
@@ -208,23 +201,44 @@ vec3 SkyColor(vec3 direction)
 
 float ShadowFactor(vec3 geometricNormal, vec3 sunDirection)
 {
+    // The depth samples lie at different points on an inclined receiver.
+    // Predict its depth at each texel centre to avoid self-shadow patterns.
+    float lightW = abs(lightSpacePosition.w) > 0.000001 ? lightSpacePosition.w : 1.0;
+    vec3 projected = lightSpacePosition.xyz / lightW;
+    projected = projected * 0.5 + 0.5;
+    vec3 dx = dFdx(projected);
+    vec3 dy = dFdy(projected);
+    float determinant = dx.x * dy.y - dx.y * dy.x;
+    vec2 depthGradient = vec2(0.0);
+    if (abs(determinant) > 0.0000000001)
+        depthGradient = vec2(dx.z * dy.y - dy.z * dx.y,
+            dx.x * dy.z - dy.x * dx.z) / determinant;
+    bool stableGradient = all(lessThan(abs(depthGradient), vec2(8.0)));
+    if (!stableGradient)
+        depthGradient = vec2(0.0);
     if (lightSpacePosition.w <= 0.0)
         return 0.0;
-    vec3 projected = lightSpacePosition.xyz / lightSpacePosition.w;
-    projected = projected * 0.5 + 0.5;
     if (projected.x < 0.0 || projected.x > 1.0 || projected.y < 0.0 || projected.y > 1.0
         || projected.z < 0.0 || projected.z > 1.0)
         return 0.0;
     float bias = max(0.0009 * (1.0 - max(dot(geometricNormal, sunDirection), 0.0)), 0.00028);
-    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
-    float shadow = 0.0;
-    for (int x = -1; x <= 1; ++x)
-        for (int y = -1; y <= 1; ++y)
-        {
-            float nearestDepth = texture(uShadowMap, projected.xy + vec2(x, y) * texel).r;
-            shadow += projected.z - bias > nearestDepth ? 1.0 : 0.0;
-        }
-    return shadow / 9.0;
+    vec2 shadowSize = vec2(textureSize(uShadowMap, 0));
+    vec2 texel = 1.0 / shadowSize;
+    // Bilinear four-tap PCF uses the surrounding texel centres continuously.
+    vec2 cell = projected.xy * shadowSize - 0.5;
+    vec2 blend = fract(cell);
+    vec2 centreUV = (floor(cell) + 0.5) * texel;
+    float centreDepth = projected.z + dot(depthGradient, centreUV - projected.xy);
+    vec2 depthStep = depthGradient * texel;
+    vec4 depths = vec4(texture(uShadowMap, centreUV).r,
+        texture(uShadowMap, centreUV + vec2(texel.x, 0.0)).r,
+        texture(uShadowMap, centreUV + vec2(0.0, texel.y)).r,
+        texture(uShadowMap, centreUV + texel).r);
+    vec4 receivers = centreDepth + vec4(0.0, depthStep.x, depthStep.y,
+        depthStep.x + depthStep.y) - bias;
+    vec4 shadows = vec4(greaterThan(receivers, depths));
+    return mix(mix(shadows.x, shadows.y, blend.x),
+        mix(shadows.z, shadows.w, blend.x), blend.y);
 }
 
 vec3 MicroNormal(vec3 normal)
@@ -299,13 +313,15 @@ vec3 StreetLighting(vec3 normal)
 
 void main()
 {
-    if (!uUseAssetMaterials && uSurface == 20)
+    int materialSurface = uUseAssetMaterials ? uAssetSurface : uSurface;
+    if (materialSurface == 20)
     {
-        vec3 emission = mix(uColor, vec3(1.0, 0.86, 0.54), 0.80) * 1.08;
+        vec3 emission = uUseAssetMaterials ? uMaterialColor * 1.08
+            : mix(uColor, vec3(1.0, 0.86, 0.54), 0.80) * 1.08;
         fragColor = vec4(min(emission, vec3(1.0)), 1.0);
         return;
     }
-    if (!uUseAssetMaterials && uSurface == 15)
+    if (!uUseAssetMaterials && materialSurface == 15)
     {
         float radius = length(texCoord * 2.0 - 1.0);
         float alpha = (1.0 - smoothstep(0.24, 1.0, radius)) * 0.22;
@@ -327,7 +343,7 @@ void main()
     float skyFill = 0.37 + max(normal.y, 0.0) * 0.09;
     vec3 ambient = vec3(0.92, 0.98, 1.05) * skyFill;
     vec3 direct = sunlight * visibility * vec3(0.72, 0.70, 0.65);
-    if (!uUseAssetMaterials && uSurface >= 10 && uSurface <= 12)
+    if (!uUseAssetMaterials && materialSurface >= 10 && materialSurface <= 12)
         ambient = max(ambient, vec3(0.48));
     vec3 shade = color * (ambient + direct);
     float lamp = LampDiffuse(uGarageLampPosition, normal)
@@ -335,16 +351,16 @@ void main()
     shade += color * lamp * vec3(0.85, 0.65, 0.40);
     shade += color * StreetLighting(normal);
 
-    if (!uUseAssetMaterials)
+    if (!uUseAssetMaterials || uAssetSurface != 0)
     {
         vec3 halfVector = normalize(sunDirection + viewDirection);
         float nDotV = max(dot(normal, viewDirection), 0.0);
         float nDotH = max(dot(normal, halfVector), 0.0);
-        if (uSurface == 8 || uSurface == 18)
+        if (materialSurface == 8 || materialSurface == 18)
         {
             vec3 reflected = reflect(-viewDirection, normal);
             vec3 environment = SkyColor(reflected);
-            bool vehicle = uSurface == 18;
+            bool vehicle = materialSurface == 18;
             vec3 glassInterior = vehicle ? vec3(0.045, 0.082, 0.095) : color * 0.28;
             float fresnel = pow(1.0 - nDotV, 5.0);
             float reflection = (vehicle ? 0.40 : 0.34) + fresnel * 0.48;
@@ -356,49 +372,30 @@ void main()
             shade += vec3(0.94, 0.94, 0.89) * pow(nDotH, vehicle ? 150.0 : 96.0)
                 * visibility * (vehicle ? 0.58 : 0.38);
         }
-        else if (uSurface == 16) // Automotive paint: broad clearcoat on curved panels.
+        else if (materialSurface == 16) // Automotive paint: broad clearcoat on curved panels.
         {
             float fresnel = 0.035 + 0.11 * pow(1.0 - nDotV, 5.0);
             shade = mix(shade, SkyColor(reflect(-viewDirection, normal)), fresnel);
             shade += vec3(0.95, 0.94, 0.88) * pow(nDotH, 58.0) * visibility * 0.34;
             shade += vec3(0.91, 0.92, 0.91) * pow(nDotH, 18.0) * visibility * 0.035;
         }
-        else if (uSurface == 17) // Chrome retains a dark reflected underside.
+        else if (materialSurface == 17) // Chrome retains a dark reflected underside.
         {
             vec3 reflected = SkyColor(reflect(-viewDirection, normal));
             float fresnel = 0.58 + 0.33 * pow(1.0 - nDotV, 5.0);
             shade = mix(shade * 0.80, reflected * color * 1.17, fresnel);
             shade += vec3(0.97, 0.98, 0.94) * pow(nDotH, 180.0) * visibility * 0.86;
         }
-        else if (uSurface == 9)
+        else if (materialSurface == 9)
             shade += vec3(0.93, 0.94, 0.90) * pow(nDotH, 28.0) * visibility * 0.035;
-        else if (uSurface == 22)
-        {
-            // Small moving slopes reflect the cached sky; no riverbed/interior is required.
-            vec2 river = worldPosition.xz;
-            float waveX = 0.038 * cos(river.x * 0.85 + river.y * 0.21 + uTime * 0.70)
-                + 0.017 * cos(river.x * 1.70 - river.y * 0.37 - uTime * 0.43);
-            float waveZ = 0.025 * cos(river.y * 1.10 - river.x * 0.25 - uTime * 0.53)
-                + 0.012 * cos(river.x * 0.63 + river.y * 1.60 + uTime * 0.39);
-            vec3 waterNormal = normalize(vec3(-waveX, 1.0, -waveZ));
-            float waterFacing = max(dot(waterNormal, viewDirection), 0.0);
-            float fresnel = 0.065 + 0.65 * pow(1.0 - waterFacing, 5.0);
-            float shore = smoothstep(0.0, 0.17, min(texCoord.x, 1.0 - texCoord.x));
-            vec3 shallow = mix(vec3(0.22, 0.36, 0.31), color, shore);
-            vec3 reflection = SkyColor(reflect(-viewDirection, waterNormal));
-            shade = mix(shallow * vec3(0.82, 0.94, 0.98), reflection, fresnel);
-            float ripple = sin(river.x * 3.4 + river.y * 1.7 - uTime * 0.85);
-            shade *= 0.99 + ripple * 0.012;
-            float sparkle = pow(max(dot(waterNormal, halfVector), 0.0), 115.0);
-            shade += vec3(0.94, 0.93, 0.80) * sparkle * visibility * 0.42;
-        }
+
     }
 
     float haze = smoothstep(42.0, 170.0, distance(uCameraPosition, worldPosition)) * 0.72;
     // Local architecture keeps its existing depth; only the scenery fully fades
     // into the cubemap horizon before the distant ground reaches its outer edge.
     vec3 hazeColor = mix(uHazeColor, vec3(0.75, 0.81, 0.84), 0.70);
-    if (!uUseAssetMaterials && uSurface >= 21 && uSurface <= 24)
+    if (!uUseAssetMaterials && materialSurface >= 21 && materialSurface <= 22)
     {
         float sceneryDistance = distance(uCameraPosition, worldPosition);
         float aerial = smoothstep(70.0, 210.0, sceneryDistance) * 0.32;

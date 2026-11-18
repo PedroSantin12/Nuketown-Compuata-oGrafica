@@ -32,8 +32,6 @@ public:
     void generateWheelTorus();
     void generateTerrainRidge();
     void generateDesertBasin(float innerRadius = 92.0f, float outerRadius = 215.0f);
-    void generateRiverRibbon();
-    void generatePalmFrond();
     void generateSphere(float radius = 1.0f, int sectors = 36, int stacks = 18);
     void generateCylinder(float radius = 1.0f, float height = 2.0f, int sectors = 36);
     void generatePlane(float width = 2.0f, float height = 2.0f, int widthSegments = 1, int heightSegments = 1);

@@ -93,8 +93,10 @@ void SceneNuketown::BuildLandmarks()
     const glm::vec3 teal(0.24f, 0.42f, 0.39f);
     const glm::mat4 sign = PlaceLandmark({5.9f, 0.0f, 14.6f}, -90.0f);
 
-    BuildParkedCar({0.45f, 17.5f}, 75.0f, {0.44f, 0.50f, 0.45f}, true);
-    BuildParkedCar({-9.2f, 1.55f}, 68.0f, {0.62f, 0.68f, 0.56f});
+    // Leave a complete walking lane between the car and the closed end fence.
+    BuildParkedCar({0.45f, 16.0f}, 75.0f, {0.44f, 0.50f, 0.45f}, true);
+    // The driveway car leaves enough room to enter the newly opened green garage.
+    BuildParkedCar({-8.0410f, 2.0183f}, 68.0f, {0.62f, 0.68f, 0.56f});
 
     // The sign faces the road. Its face has its own readable, non-repeating texture.
     for (float side : {-1.0f, 1.0f})

@@ -2,6 +2,11 @@
 #include "Engine/CAsset.h"
 #include <stdexcept>
 
+glm::vec3 SceneNuketown::SunDirection()
+{
+    return glm::normalize(glm::vec3(-0.55f, 0.85f, 0.42f));
+}
+
 void SceneNuketown::InitializeRenderingResources()
 {
     shader.LoadShader("NuketownSky", "Scenes/Nuketown/NuketownSky.vert", "Scenes/Nuketown/NuketownSky.frag");
@@ -24,7 +29,7 @@ void SceneNuketown::InitializeRenderingResources()
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         throw std::runtime_error("Nuketown shadow framebuffer is incomplete");
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    const glm::vec3 sun = glm::normalize(glm::vec3(-0.55f, 0.85f, 0.42f));
+    const glm::vec3 sun = SunDirection();
     const glm::vec3 center(0.0f, 0.0f, -1.0f);
     lightViewProjection = glm::ortho(-43.0f, 43.0f, -36.0f, 36.0f, 1.0f, 140.0f)
         * glm::lookAt(center + sun * 70.0f, center, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -119,7 +124,7 @@ void SceneNuketown::BakeSkyEnvironment()
     shader.SetBool("uBakeSky", true);
     shader.SetInt("uEnvironmentMap", 9);
     shader.SetVec3("uCameraPosition", glm::vec3(0.0f));
-    shader.SetVec3("uSunDirection", glm::normalize(glm::vec3(-0.55f, 0.85f, 0.42f)));
+    shader.SetVec3("uSunDirection", SunDirection());
     glBindVertexArray(skyVao);
     for (unsigned int face = 0; face < 6; ++face)
     {
@@ -164,8 +169,7 @@ void SceneNuketown::RenderShadowMap()
     shader.SetMat4("uLightViewProjection", lightViewProjection);
     for (const Part& part : parts)
     {
-        if (part.surface == Surface::Shadow || part.surface == Surface::Water
-            || part.surface == Surface::Mountains) continue;
+        if (part.surface == Surface::Shadow || part.surface == Surface::Mountains) continue;
         shader.SetMat4("uModel", part.model);
         part.mesh->render();
     }
@@ -196,7 +200,7 @@ void SceneNuketown::DrawSky(const glm::mat4& viewProjection, glm::vec3 viewPosit
     glBindTexture(GL_TEXTURE_CUBE_MAP, environmentTexture);
     shader.SetMat4("uInverseViewProjection", glm::inverse(viewProjection));
     shader.SetVec3("uCameraPosition", viewPosition);
-    shader.SetVec3("uSunDirection", glm::normalize(glm::vec3(-0.55f, 0.85f, 0.42f)));
+    shader.SetVec3("uSunDirection", SunDirection());
     glBindVertexArray(skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);

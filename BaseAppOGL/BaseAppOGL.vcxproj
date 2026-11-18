@@ -35,6 +35,7 @@
     <ClInclude Include="Engine\imgui\imstb_truetype.h" />
     <ClInclude Include="Engine\CInputManager.h" />
     <ClInclude Include="Engine\CSceneManager.h" />
+    <ClInclude Include="Engine\CWindowMode.h" />
     <ClInclude Include="Engine\stb_image.h" />
     <ClInclude Include="Scenes\Nuketown\SceneNuketown.h" />
     <ClInclude Include="Scenes\Nuketown\NuketownTraversal.h" />
@@ -97,6 +98,11 @@
     <None Include="Scenes\Nuketown\Assets\Signs\MakeLabels.py" />
     <None Include="Scenes\Nuketown\Assets\Bus\MakeBus.ms" />
     <None Include="Scenes\Nuketown\Assets\Bus\BUSPAINT.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Bus\BUS.3ds" />
+    <None Include="Scenes\Nuketown\Assets\Bus\Bus.max" />
+    <None Include="Scenes\Nuketown\Assets\Bus\BUSLABEL.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Bus\MakeBusLabels.py" />
+    <None Include="Scenes\Nuketown\Assets\Bus\README.md" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

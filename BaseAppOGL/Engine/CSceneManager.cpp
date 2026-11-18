@@ -12,6 +12,15 @@ void CSceneManager::ProcessSceneInput(GLFWwindow* window, float deltaTime)
 	if (input.IsKeyJustPressed(GLFW_KEY_ESCAPE))
 		glfwSetWindowShouldClose(window, true);
 
+	if (input.IsKeyJustPressed(GLFW_KEY_F11) && windowMode.Toggle(window))
+	{
+		glfwSwapInterval(bVsyncEnabled ? 1 : 0);
+		InputManager::GetInstance().SetCursorMode(glfwGetInputMode(window, GLFW_CURSOR));
+		// Resizing can deliver cursor coordinates in the new window space.
+		// Skip movement until the next frame resets those mouse deltas.
+		return;
+	}
+
 	if (input.IsKeyJustPressed(GLFW_KEY_V))
 	{
 		bVsyncEnabled = !bVsyncEnabled;

@@ -23,6 +23,13 @@ namespace
         return CCamera({-25.0f, eyeHeight, -3.5f}, {0.0f, 1.0f, 0.0f}, 36.0f, -2.5f);
     }
 
+    CCamera MakeOverviewCamera()
+    {
+        CCamera overview({0.0f, 48.0f, 36.0f}, {0.0f, 1.0f, 0.0f}, -90.0f, -53.13f);
+        overview.Zoom = 60.0f;
+        return overview;
+    }
+
     glm::mat4 PlaceInMap(glm::vec3 position, float yaw)
     {
         return glm::rotate(glm::translate(glm::mat4(1.0f), position),
@@ -30,7 +37,7 @@ namespace
     }
 }
 
-SceneNuketown::SceneNuketown() : camera(MakeStartingCamera())
+SceneNuketown::SceneNuketown() : camera(MakeStartingCamera()), inspectionCamera(MakeOverviewCamera())
 {
     shader.LoadShader("Nuketown", "Scenes/Nuketown/Nuketown.vert", "Scenes/Nuketown/Nuketown.frag");
 
@@ -56,8 +63,6 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera())
     truckHood.generateTruckHood();
     tire.generateWheelTorus();
     desertBasin.generateDesertBasin();
-    riverRibbon.generateRiverRibbon();
-    palmFrond.generatePalmFrond();
 
     box.setupBuffers();
     cylinder.setupBuffers();
@@ -65,7 +70,6 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera())
     pyramid.setupBuffers();
     roundedBox.setupBuffers(); carBody.setupBuffers(); carCabin.setupBuffers();
     truckHood.setupBuffers(); tire.setupBuffers(); desertBasin.setupBuffers();
-    riverRibbon.setupBuffers(); palmFrond.setupBuffers();
 
     BuildEnvironment();
     BuildStreet();
@@ -75,7 +79,6 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera())
     BuildWestGarden();
     BuildStreetLighting();
     BuildTestSiteFixtures();
-    BuildNorthBoundary();
     BuildPerimeter();
     BuildClockTower();
     BuildBus();
@@ -108,16 +111,14 @@ void SceneNuketown::DrawScene(float)
 
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     const glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspect, Z_NEAR, Z_FAR);
-    const glm::vec3 viewPosition = GetViewPosition();
-    const glm::mat4 view = thirdPerson
-        ? glm::lookAt(viewPosition, camera.Position + camera.Front * 3.0f - glm::vec3(0.0f, 0.65f, 0.0f), camera.WorldUp)
-        : camera.GetViewMatrix();
+    const glm::vec3 viewPosition = camera.Position;
+    const glm::mat4 view = camera.GetViewMatrix();
     const glm::mat4 viewProjection = projection * view;
     DrawSky(viewProjection, viewPosition);
     shader.Use("Nuketown");
     shader.SetMat4("uViewProjection", viewProjection);
     shader.SetMat4("uLightViewProjection", lightViewProjection);
-    shader.SetVec3("uSunDirection", glm::normalize(glm::vec3(-0.55f, 0.85f, 0.42f)));
+    shader.SetVec3("uSunDirection", SunDirection());
     shader.SetInt("uStreetLightMap", 10);
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, streetLightTexture);
@@ -131,7 +132,6 @@ void SceneNuketown::DrawScene(float)
     shader.SetVec3("uHazeColor", hazeColor);
     shader.SetVec3("uGarageLampPosition", garageLampPosition);
     shader.SetVec3("uSecondGarageLampPosition", secondGarageLampPosition);
-    shader.SetFloat("uTime", static_cast<float>(glfwGetTime()));
     const int lightCount = static_cast<int>(std::min<size_t>(streetLightPositions.size(), 8));
     shader.SetInt("uStreetLightCount", lightCount);
     for (int index = 0; index < lightCount; ++index)
@@ -191,8 +191,6 @@ void SceneNuketown::DrawScene(float)
     }
 
     shader.SetInt("uSurface", static_cast<int>(Surface::Solid));
-    if (thirdPerson && glm::distance(viewPosition, camera.Position) > 0.85f)
-        DrawAvatar();
 
     if (busAsset)
     {
@@ -212,17 +210,24 @@ void SceneNuketown::ProcessSceneInput(GLFWwindow*, float deltaTime)
     {
         menuOpen = !menuOpen;
         InputManager::GetInstance().SetCursorMode(menuOpen ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+        return;
+    }
+
+    if (input.IsKeyJustPressed(GLFW_KEY_F6))
+    {
+        ToggleFlyCamera();
+        return;
     }
 
     if (menuOpen)
         return;
 
-    if (input.IsKeyJustPressed(GLFW_KEY_F5))
-        thirdPerson = !thirdPerson;
-
     if (input.IsKeyJustPressed(GLFW_KEY_R))
     {
-        camera = MakeStartingCamera();
+        if (flyCameraEnabled)
+            ResetFlyCamera();
+        else
+            camera = MakeStartingCamera();
         return;
     }
 
@@ -232,6 +237,14 @@ void SceneNuketown::ProcessSceneInput(GLFWwindow*, float deltaTime)
         - static_cast<float>(input.IsKeyPressed(GLFW_KEY_S));
     const float sideInput = static_cast<float>(input.IsKeyPressed(GLFW_KEY_D))
         - static_cast<float>(input.IsKeyPressed(GLFW_KEY_A));
+    if (flyCameraEnabled)
+    {
+        const float verticalInput = static_cast<float>(input.IsKeyPressed(GLFW_KEY_SPACE))
+            - static_cast<float>(input.IsKeyPressed(GLFW_KEY_LEFT_CONTROL));
+        MoveFlyCamera(camera.Front * forwardInput + camera.Right * sideInput
+            + camera.WorldUp * verticalInput, deltaTime, input.IsKeyPressed(GLFW_KEY_LEFT_SHIFT));
+        return;
+    }
     if (forwardInput == 0.0f && sideInput == 0.0f)
         return;
 
@@ -245,41 +258,40 @@ void SceneNuketown::ProcessSceneInput(GLFWwindow*, float deltaTime)
         + glm::vec3(0.0f, eyeHeight, 0.0f);
 }
 
-glm::vec3 SceneNuketown::GetViewPosition() const
+void SceneNuketown::ToggleFlyCamera()
 {
-    if (!thirdPerson)
-        return camera.Position;
-
-    glm::vec3 desired = camera.Position - camera.Front * cameraDistance + glm::vec3(0.0f, 0.8f, 0.0f);
-    desired.y = std::max(desired.y, 0.35f);
-    return traversal.ConstrainCamera(camera.Position, desired);
+    if (flyCameraEnabled)
+    {
+        inspectionCamera = camera;
+        camera = savedWalkingCamera;
+    }
+    else
+    {
+        savedWalkingCamera = camera;
+        camera = inspectionCamera;
+    }
+    flyCameraEnabled = !flyCameraEnabled;
 }
 
-void SceneNuketown::DrawAvatar()
+void SceneNuketown::ResetFlyCamera()
 {
-    const glm::mat4 avatar = PlaceInMap({camera.Position.x, camera.Position.y - eyeHeight + 0.05f, camera.Position.z}, 90.0f - camera.Yaw);
-    const auto draw = [this, &avatar](CPrimitives& mesh, glm::vec3 center, glm::vec3 size, glm::vec3 color)
-    {
-        const glm::mat4 model = glm::scale(glm::translate(avatar, center), size);
-        shader.SetMat4("uModel", model);
-        shader.SetMat3("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(model))));
-        shader.SetVec3("uColor", color);
-        mesh.render();
-    };
-    const glm::vec3 clothing(0.27f, 0.36f, 0.40f);
-    const glm::vec3 trousers(0.23f, 0.26f, 0.24f);
-    const glm::vec3 skin(0.70f, 0.54f, 0.39f);
-    draw(box, {0.0f, 1.15f, 0.0f}, {0.48f, 0.60f, 0.28f}, clothing);
-    draw(box, {0.0f, 0.79f, 0.0f}, {0.36f, 0.19f, 0.25f}, trousers);
-    draw(sphere, {0.0f, 1.60f, 0.0f}, {0.17f, 0.19f, 0.16f}, skin);
-    draw(box, {0.0f, 1.64f, 0.151f}, {0.23f, 0.06f, 0.045f}, tireRubber);
-    for (float side : {-1.0f, 1.0f})
-    {
-        draw(box, {side * 0.105f, 0.42f, 0.0f}, {0.15f, 0.65f, 0.18f}, trousers);
-        draw(box, {side * 0.105f, 0.09f, 0.045f}, {0.18f, 0.16f, 0.29f}, tireRubber);
-        draw(box, {side * 0.33f, 1.13f, 0.0f}, {0.14f, 0.54f, 0.17f}, clothing);
-        draw(sphere, {side * 0.33f, 0.82f, 0.0f}, {0.073f, 0.083f, 0.072f}, skin);
-    }
+    inspectionCamera = MakeOverviewCamera();
+    if (flyCameraEnabled)
+        camera = inspectionCamera;
+}
+
+void SceneNuketown::MoveFlyCamera(glm::vec3 direction, float deltaTime, bool accelerated)
+{
+    const float distance = glm::length(direction);
+    if (!flyCameraEnabled || distance < 0.00001f)
+        return;
+
+    // Inspection ignores scene collisions, while the walking camera stays saved.
+    const float speed = accelerated ? 32.0f : 12.0f;
+    const float stepTime = std::clamp(deltaTime, 0.0f, 0.05f);
+    camera.Position += direction / distance * speed * stepTime;
+    camera.Position = glm::clamp(camera.Position,
+        glm::vec3(-350.0f, 0.5f, -350.0f), glm::vec3(350.0f, 180.0f, 350.0f));
 }
 
 void SceneNuketown::DrawMenu()
@@ -290,17 +302,31 @@ void SceneNuketown::DrawMenu()
     ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Nuketown", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse))
     {
-        ImGui::Checkbox("Terceira pessoa (F5)", &thirdPerson);
-        if (thirdPerson)
-            ImGui::SliderFloat("Distancia da camera", &cameraDistance, 1.8f, 5.0f, "%.1f m");
-        if (ImGui::Button("Quintal verde (R)"))
+        bool requestedFlight = flyCameraEnabled;
+        if (ImGui::Checkbox("Camera livre (F6)", &requestedFlight))
+            ToggleFlyCamera();
+        if (flyCameraEnabled && ImGui::Button("Vista geral (R)"))
+            ResetFlyCamera();
+        if (ImGui::Button(flyCameraEnabled ? "Ir ao quintal verde" : "Quintal verde (R)"))
+        {
+            if (flyCameraEnabled)
+                ToggleFlyCamera();
             camera = MakeStartingCamera();
+        }
         if (ImGui::Button("Ir ao quintal amarelo"))
+        {
+            if (flyCameraEnabled)
+                ToggleFlyCamera();
             camera = CCamera({25.0f, eyeHeight, 3.0f}, {0.0f, 1.0f, 0.0f}, -145.0f, -2.5f);
+        }
         ImGui::Separator();
         ImGui::TextUnformatted("Mapa completo | Exteriores");
-        ImGui::TextUnformatted("WASD  andar | Mouse  olhar");
-        ImGui::TextUnformatted("Shift  correr | Enter  fechar menu");
+        ImGui::TextUnformatted(flyCameraEnabled ? "WASD  voar | Mouse  olhar" : "WASD  andar | Mouse  olhar");
+        if (flyCameraEnabled)
+            ImGui::TextUnformatted("Espaco  subir | Ctrl esquerdo  descer");
+        ImGui::TextUnformatted(flyCameraEnabled ? "Shift  acelerar | R  vista geral" : "Shift  correr | R  inicio");
+        ImGui::TextUnformatted("F6  camera livre | F11  tela cheia");
+        ImGui::TextUnformatted("Enter  fechar menu");
     }
     ImGui::End();
 }
