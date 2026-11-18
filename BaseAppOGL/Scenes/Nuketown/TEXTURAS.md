@@ -22,8 +22,15 @@ As janelas têm moldura, caixilhos e peitoril modelados, vidro recuado e reflexo
 por cubemap do céu. O céu procedural é desenhado uma vez nas seis faces de uma
 textura de ambiente 256x256, com mipmaps; o mesmo cubemap é reutilizado no fundo,
 vidros, cromados e pintura dos veículos. Isso evita recalcular nuvens por fragmento.
-Os cômodos principais das casas permanecem fechados, sem refração ou transparência
-para seu interior. As duas garagens têm aberturas reais na geometria e são acessíveis.
+Os cômodos principais das casas permanecem fechados. As duas garagens têm aberturas
+reais na geometria e são acessíveis. Suas janelas laterais transmitem a cena: o
+shader usa `refract` com índice 1,52 para deslocar a leitura da imagem opaca, além
+de reflexão Fresnel do cubemap. O céu transmitido também é amostrado na direção
+refratada. Uma cópia da profundidade impede puxar objetos que estão na frente do vidro.
+Os vidros são planos de duas faces desenhados após os opacos, ordenados do mais
+distante ao mais próximo, com `GL_SRC_ALPHA / GL_ONE_MINUS_SRC_ALPHA` e sem escrever
+profundidade. A imagem é resolvida a partir do framebuffer com MSAA; os destinos
+só são realocados ao mudar a resolução. As janelas mantêm seus colisores.
 
 O ônibus remodelado no 3ds Max mantém seus materiais e UVs importados do arquivo
 .3DS. Pintura, vidro, cromo e borracha recebem tratamento de material no shader,
@@ -41,8 +48,9 @@ As paredes amarelas usam frisos verticais; as verdes mantêm frisos horizontais.
 As sombras de contato dos veículos mantêm mistura alfa e máscara radial suave.
 A iluminação agora também utiliza um depth map 2048x2048 do sol, com filtro PCF
 bilinear de quatro amostras, com correção da profundidade nas faces inclinadas.
-Ele é calculado uma vez para os objetos estáticos. Não é um lightmap produzido
-no 3ds Max; é um passe de profundidade em OpenGL.
+Ele é calculado uma vez para os objetos estáticos e continua sendo um passe de
+profundidade em OpenGL. Separadamente, o piso das garagens usa um bake verdadeiro
+do 3ds Max, descrito abaixo.
 
 ## Geometria e materiais dos veículos
 
@@ -62,9 +70,36 @@ fora da passagem central. Os colisores acompanham paredes e objetos, permitindo
 atravessar cada garagem; a casa principal continua sólida e fechada.
 
 As luminárias internas combinam superfícies emissivas com fontes de luz para
-iluminar o piso, as caixas e as paredes. Essa iluminação usa o shader da cena.
-Ela não representa um bake de sombras produzido no 3ds Max, que permanece uma
-etapa separada dos mapas de iluminação e profundidade gerados pela aplicação.
+iluminar o piso, as caixas e as paredes. O piso recebe a textura estática
+`Assets/Bake/GarageShadow.bmp`, produzida pelo Render To Texture do 3ds Max 2027.2.
+O arquivo `GarageBake.max` contém o receptor UV, as caixas, a bancada, as paredes,
+o teto e uma luz pontual na mesma posição local da aplicação. `MakeGarageBake.ms`
+reproduz a cena e o bake com o renderer Scanline e seu gerador clássico ShadowMap.
+
+O mapa RGB de 1024 x 1024 é a saída original do elemento `ShadowsMap` do Max:
+branco conserva a iluminação da lâmpada, preto a bloqueia. Não é gerado em Python,
+na CPU da aplicação ou pelo passe de profundidade OpenGL. As duas garagens têm
+a mesma geometria local e compartilham a textura; suas rotações são consideradas
+por matrizes inversas próprias. UVs: `(localXZ + (2.33, 3.24)) / (4.35, 6.48)`.
+A aplicação limita a textura ao topo do piso receptor, Y local = 0,022 m.
+Ela modula apenas a contribuição da lâmpada correspondente; o sol e a iluminação
+ambiente permanecem separados, evitando aplicar a mesma sombra duas vezes.
+O `.max`, receptor `.3ds`, mapa de iluminação auxiliar, gerador, relatório e
+verificador de orientação acompanham os arquivos em `Assets/Bake/`.
+
+## Normal Mapping
+
+`Assets/Materials/CONCRETE_NORMAL.BMP` e `ASPHALT_NORMAL.BMP` são mapas RGB de normais
+no espaço da tangente, com 512 x 512 pixels. Foram criados para este projeto por
+um gerador determinístico em Python padrão; Python não é uma dependência da aplicação.
+O concreto repete a cada 0,64 m; o asfalto, a cada 0,80 m. A `CTextures` da base os
+carrega como dados RGB lineares, com mipmaps e filtragem anisotrópica.
+
+O shader decodifica RGB para [-1,1], ajusta a força do relevo e renormaliza. Uma base
+de tangente/bitangente calculada a partir das derivadas da posição e dos UVs leva
+a normal para o mundo. Isso preserva o formato de vértice da base e mantém as
+sombras geométricas e as colisões independentes dos poros. Pedra e areia continuam
+com bump procedural. O menu permite comparar o relevo e o bake ligados/desligados.
 
 
 ## Paisagem externa e fechamento do terreno

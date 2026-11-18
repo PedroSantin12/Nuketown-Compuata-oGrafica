@@ -1,0 +1,69 @@
+{
+  "bake_method": "3ds Max Render To Texture",
+  "max_version": "3ds Max 2027.2 (29.2.0.20588)",
+  "generated_utc": "2026-11-18T23:29:52.088785+00:00",
+  "renderer": "Default_Scanline_Renderer",
+  "bake_elements": [
+    "ShadowsMap",
+    "LightingMap"
+  ],
+  "shadow_generator": {
+    "class": "ShadowMap",
+    "map_size": 2048,
+    "sample_range": 1.0,
+    "absolute_bias": 0.001,
+    "two_sided": true
+  },
+  "color_management": "Unmanaged; linear RGB visibility multiplier",
+  "postprocessing": "None. Both BMP images are original Render To Texture outputs.",
+  "receiver": {
+    "name": "GarageFloor_BakeReceiver",
+    "triangle_count": 2,
+    "uv_channel": 1,
+    "x_min_m": -2.33,
+    "x_max_m": 2.02,
+    "z_min_m": -3.24,
+    "z_max_m": 3.24,
+    "y_top_m": 0.022,
+    "u": "(localX+2.33)/4.35",
+    "v": "(localZ+3.24)/6.48"
+  },
+  "point_light_local_opengl_m": [
+    -0.16,
+    2.48,
+    -0.15
+  ],
+  "max_coordinates_from_opengl": "(x,-z,y)",
+  "opaque_occluder_count": 20,
+  "occluders": "Garage wall shell with side-window opening, ceiling, raised sectional gate, four crates, workbench and its box",
+  "instancing": "Same local shadow multiplier reused by the green and yellow garages through their inverse world transforms.",
+  "runtime_use": "Multiply the matching garage point-light diffuse contribution on the receiver floor only; solar shadow map remains independent.",
+  "native_batch_completed": true,
+  "native_batch_summary": "BAKE_SUCCESS; ShadowsMap and LightingMap files created at 1024 x 1024; editable Max scene and receiver export saved.",
+  "portable_scene_summary": "PORTABLE_BAKE_SAVED texture:GarageShadow.bmp renderer:Default_Scanline_Renderer elements:2",
+  "validation": {
+    "file": "GarageShadow.bmp",
+    "width": 1024,
+    "height": 1024,
+    "minimum": 0,
+    "maximum": 255,
+    "shadow_pixels": 338514,
+    "lit_pixels": 708658,
+    "local_samples": {
+      "clear_center": 255,
+      "clear_rear_aisle": 255,
+      "shadow_behind_stacked_crates": 0,
+      "shadow_front_crate": 0,
+      "shadow_workbench": 0
+    }
+  },
+  "independent_validation": "Seven direct pixel samples matched an analytic ray/AABB visibility check; a vertically inverted lookup did not match.",
+  "sha256": {
+    "MakeGarageBake.ms": "76db5f887bed86ccbb512ac27f3e8a7857ac2fe54c1d529977f9219f1b85f985",
+    "ValidateBake.py": "1e86e9774b5de7e4a85a077b7f2b0749b2945bc07415139a9f8e5db0a264b017",
+    "GarageBake.max": "2bbcc64b8fdc5eddc37d28a404ce6867f55dd8903b0b15e3cdda0e18fbbe560f",
+    "GarageShadow.bmp": "28a5eb8b65275b79bd4b14da46ade26fc30246f6df3b6e8b79c907ffdb4fda08",
+    "GarageLighting.bmp": "ff276bafa16d1e124fd5b2ca664925039694ca25abbba080c936a402d6833dee",
+    "GARFLOOR.3ds": "fd206d240b0af2039e4834b0cb3a0be27ef77a78ac2da09c48372d6846cdaf0f"
+  }
+}

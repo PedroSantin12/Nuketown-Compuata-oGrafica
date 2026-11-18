@@ -169,7 +169,8 @@ void SceneNuketown::RenderShadowMap()
     shader.SetMat4("uLightViewProjection", lightViewProjection);
     for (const Part& part : parts)
     {
-        if (part.surface == Surface::Shadow || part.surface == Surface::Mountains) continue;
+        if (part.surface == Surface::Shadow || part.surface == Surface::Mountains
+            || part.surface == Surface::RefractiveGlass) continue;
         shader.SetMat4("uModel", part.model);
         part.mesh->render();
     }
@@ -208,4 +209,83 @@ void SceneNuketown::DrawSky(const glm::mat4& viewProjection, glm::vec3 viewPosit
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, polygonMode[0]);
+}
+
+void SceneNuketown::CaptureOpaqueScene(int width, int height)
+{
+    GLint readFramebuffer = 0, drawFramebuffer = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
+    if (refractionFramebuffer == 0)
+    {
+        glGenFramebuffers(1, &refractionFramebuffer);
+        glGenTextures(1, &refractionColorTexture);
+        glGenTextures(1, &refractionDepthTexture);
+    }
+    if (refractionWidth != width || refractionHeight != height)
+    {
+        // Depth blits require matching source and destination formats. Query the
+        // GLFW framebuffer instead of assuming a particular driver's depth format.
+        GLint depthBits = 24, stencilBits = 0, depthType = GL_UNSIGNED_NORMALIZED;
+        glGetFramebufferAttachmentParameteriv(GL_READ_FRAMEBUFFER,
+            readFramebuffer == 0 ? GL_DEPTH : GL_DEPTH_ATTACHMENT,
+            GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE, &depthBits);
+        glGetFramebufferAttachmentParameteriv(GL_READ_FRAMEBUFFER,
+            readFramebuffer == 0 ? GL_DEPTH : GL_DEPTH_ATTACHMENT,
+            GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE, &depthType);
+        glGetFramebufferAttachmentParameteriv(GL_READ_FRAMEBUFFER,
+            readFramebuffer == 0 ? GL_STENCIL : GL_STENCIL_ATTACHMENT,
+            GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, &stencilBits);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, refractionFramebuffer);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glActiveTexture(GL_TEXTURE11);
+        glBindTexture(GL_TEXTURE_2D, refractionColorTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D, refractionColorTexture, 0);
+        glActiveTexture(GL_TEXTURE15);
+        glBindTexture(GL_TEXTURE_2D, refractionDepthTexture);
+        if (stencilBits > 0)
+        {
+            const bool floating = depthType == GL_FLOAT;
+            glTexImage2D(GL_TEXTURE_2D, 0, floating ? GL_DEPTH32F_STENCIL8 : GL_DEPTH24_STENCIL8,
+                width, height, 0, GL_DEPTH_STENCIL,
+                floating ? GL_FLOAT_32_UNSIGNED_INT_24_8_REV : GL_UNSIGNED_INT_24_8, nullptr);
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                GL_TEXTURE_2D, refractionDepthTexture, 0);
+        }
+        else
+        {
+            const GLenum format = depthType == GL_FLOAT ? GL_DEPTH_COMPONENT32F
+                : depthBits <= 16 ? GL_DEPTH_COMPONENT16
+                : depthBits <= 24 ? GL_DEPTH_COMPONENT24 : GL_DEPTH_COMPONENT32;
+            glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0,
+                GL_DEPTH_COMPONENT, depthType == GL_FLOAT ? GL_FLOAT : GL_UNSIGNED_INT, nullptr);
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                GL_TEXTURE_2D, refractionDepthTexture, 0);
+        }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+            glActiveTexture(GL_TEXTURE0);
+            throw std::runtime_error("Nuketown refraction framebuffer is incomplete");
+        }
+        refractionWidth = width;
+        refractionHeight = height;
+    }
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, refractionFramebuffer);
+    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
+        GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
+    glActiveTexture(GL_TEXTURE0);
 }

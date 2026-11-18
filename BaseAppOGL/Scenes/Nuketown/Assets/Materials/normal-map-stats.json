@@ -1,0 +1,41 @@
+{
+  "generator": "MakeNormalMaps.py",
+  "seeded": true,
+  "encoding": "RGB8 linear OpenGL +Y",
+  "concrete": {
+    "width": 512,
+    "height": 512,
+    "tile_metres": 0.64,
+    "height_range_metres": [
+      -0.0023427235655831607,
+      0.0012415713185498802
+    ],
+    "normal_length_range_after_rgb8": [
+      0.9949584563554027,
+      1.0051080611222218
+    ],
+    "normal_tilt_degrees_mean": 2.178412994149682,
+    "normal_tilt_degrees_p95": 4.330265476852169,
+    "normal_tilt_degrees_max": 31.406678172128426,
+    "largest_wrapped_height_step_metres": 0.0004577536842307251,
+    "sha256": "b5f5dca63847a36fea8eb6863a6cc858a1a39f9a66326a5d499e9a4f2b2888d4"
+  },
+  "asphalt": {
+    "width": 512,
+    "height": 512,
+    "tile_metres": 0.8,
+    "height_range_metres": [
+      -0.0012066304867747654,
+      0.0010959976521920443
+    ],
+    "normal_length_range_after_rgb8": [
+      0.9955765294105272,
+      1.0044958528997954
+    ],
+    "normal_tilt_degrees_mean": 3.190998614037619,
+    "normal_tilt_degrees_p95": 6.662043348586618,
+    "normal_tilt_degrees_max": 15.584841286833484,
+    "largest_wrapped_height_step_metres": 0.0004080349008560404,
+    "sha256": "21bdc4b866ed96262714625a048f128ae0dcd8749c1e990fac3534e4c32ff7b0"
+  }
+}

@@ -70,6 +70,7 @@
     <ClCompile Include="Scenes\Nuketown\NuketownRendering.cpp" />
     <ClCompile Include="Scenes\Nuketown\NuketownLandscape.cpp" />
     <ClCompile Include="Scenes\Nuketown\NuketownLighting.cpp" />
+    <ClCompile Include="Scenes\Nuketown\NuketownMaterials.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Scenes\Common\Assets.frag" />
@@ -103,6 +104,19 @@
     <None Include="Scenes\Nuketown\Assets\Bus\BUSLABEL.BMP" />
     <None Include="Scenes\Nuketown\Assets\Bus\MakeBusLabels.py" />
     <None Include="Scenes\Nuketown\Assets\Bus\README.md" />
+    <None Include="Scenes\Nuketown\Assets\Materials\CONCRETE_NORMAL.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Materials\ASPHALT_NORMAL.BMP" />
+    <None Include="Scenes\Nuketown\Assets\Materials\MakeNormalMaps.py" />
+    <None Include="Scenes\Nuketown\Assets\Materials\normal-map-stats.json" />
+    <None Include="Scenes\Nuketown\Assets\Materials\README.md" />
+    <None Include="Scenes\Nuketown\Assets\Bake\GarageBake.max" />
+    <None Include="Scenes\Nuketown\Assets\Bake\GarageShadow.bmp" />
+    <None Include="Scenes\Nuketown\Assets\Bake\GarageLighting.bmp" />
+    <None Include="Scenes\Nuketown\Assets\Bake\GARFLOOR.3ds" />
+    <None Include="Scenes\Nuketown\Assets\Bake\MakeGarageBake.ms" />
+    <None Include="Scenes\Nuketown\Assets\Bake\ValidateBake.py" />
+    <None Include="Scenes\Nuketown\Assets\Bake\bake-report.json" />
+    <None Include="Scenes\Nuketown\Assets\Bake\README.md" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

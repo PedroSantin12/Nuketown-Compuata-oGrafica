@@ -88,6 +88,9 @@
     <ClCompile Include="Scenes\Nuketown\NuketownLighting.cpp">
       <Filter>Scenes\Nuketown</Filter>
     </ClCompile>
+    <ClCompile Include="Scenes\Nuketown\NuketownMaterials.cpp">
+      <Filter>Scenes\Nuketown</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Engine\CCamera.h">
@@ -239,6 +242,19 @@
     <None Include="Scenes\Nuketown\Assets\Bus\README.md">
       <Filter>Scenes\Nuketown</Filter>
     </None>
+    <None Include="Scenes\Nuketown\Assets\Materials\CONCRETE_NORMAL.BMP"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Materials\ASPHALT_NORMAL.BMP"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Materials\MakeNormalMaps.py"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Materials\normal-map-stats.json"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Materials\README.md"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\GarageBake.max"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\GarageShadow.bmp"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\GarageLighting.bmp"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\GARFLOOR.3ds"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\MakeGarageBake.ms"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\ValidateBake.py"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\bake-report.json"><Filter>Scenes\Nuketown</Filter></None>
+    <None Include="Scenes\Nuketown\Assets\Bake\README.md"><Filter>Scenes\Nuketown</Filter></None>
     <None Include="Scenes\Common\SkyBox.frag">
       <Filter>Scenes\Common</Filter>
     </None>

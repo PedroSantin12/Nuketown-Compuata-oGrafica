@@ -23,7 +23,6 @@ uniform bool uUseAssetMaterials;
 uniform bool uHasDiffuseMap;
 uniform vec3 uMaterialColor;
 uniform sampler2D uDiffuseMap;
-uniform sampler2D uGrassMap;
 uniform sampler2D uSoilMap;
 uniform sampler2D uWoodMap;
 uniform sampler2D uRoofMap;
@@ -34,6 +33,18 @@ uniform sampler2D uStoneMap;
 uniform sampler2D uShadowMap;
 uniform sampler2D uStreetLightMap;
 uniform samplerCube uEnvironmentMap;
+uniform sampler2D uSceneColorMap;
+uniform sampler2D uSceneDepthMap;
+uniform vec2 uFramebufferSize;
+uniform mat4 uViewProjection;
+uniform mat3 uNormalMatrix;
+uniform bool uEnableRefraction;
+uniform sampler2D uConcreteNormalMap;
+uniform sampler2D uAsphaltNormalMap;
+uniform sampler2D uGarageShadowBake;
+uniform mat4 uGarageWorldToLocal[2];
+uniform bool uEnableNormalMapping;
+uniform bool uEnableBakedShadows;
 
 // Smooth deterministic noise adds small wear without another texture library.
 float hash(vec2 p)
@@ -94,7 +105,7 @@ vec3 surfaceColor()
     }
     if (uSurface == 3) // Multi-texture: lawn with irregular dry/earth patches.
     {
-        vec3 lawn = texture(uGrassMap, ground * 0.40).rgb;
+        vec3 lawn = texture(uDiffuseMap, ground * 0.40).rgb;
         vec3 soil = texture(uSoilMap, ground * 0.53).rgb;
         float dry = smoothstep(0.49, 0.79, noise(ground * 0.48)) * 0.40;
         vec3 tint = uColor / vec3(0.37, 0.45, 0.25);
@@ -244,11 +255,7 @@ float ShadowFactor(vec3 geometricNormal, vec3 sunDirection)
 vec3 MicroNormal(vec3 normal)
 {
     float height = 0.0;
-    if (uSurface == 1)
-        height = (grain(worldPosition.xz * 105.0) - 0.5) * 0.0013;
-    else if (uSurface == 2)
-        height = (grain(worldPosition.xz * 135.0) - 0.5) * 0.0008;
-    else if (uSurface == 13)
+    if (uSurface == 13)
         height = noise(localUV() * 18.0) * 0.003;
     else if (uSurface == 21)
         height = (grain(worldPosition.xz * 34.0) - 0.5) * 0.0008;
@@ -264,6 +271,50 @@ vec3 MicroNormal(vec3 normal)
         return normal;
     vec3 gradient = sign(determinant) * (dFdx(height) * r1 + dFdy(height) * r2);
     return normalize(abs(determinant) * normal - gradient);
+}
+
+vec3 SurfaceNormal(vec3 normal)
+{
+    if (!uEnableNormalMapping)
+        return normal;
+    if (uSurface != 1 && uSurface != 2)
+        return MicroNormal(normal);
+
+    // Tangent-space RGB normal maps, sampled as linear data. Derivatives form
+    // the tangent basis without changing the position/normal/UV class vertex format.
+    vec2 uv = worldPosition.xz / (uSurface == 1 ? 0.80 : 0.64);
+    vec3 dpdx = dFdx(worldPosition), dpdy = dFdy(worldPosition);
+    vec2 duvdx = dFdx(uv), duvdy = dFdy(uv);
+    float determinant = duvdx.x * duvdy.y - duvdx.y * duvdy.x;
+    if (abs(determinant) < 0.00000001)
+        return normal; // Vertical edges have a degenerate horizontal projection.
+    vec3 tangent = (dpdx * duvdy.y - dpdy * duvdx.y) / determinant;
+    vec3 bitangent = (dpdy * duvdx.x - dpdx * duvdy.x) / determinant;
+    tangent -= normal * dot(normal, tangent);
+    bitangent -= normal * dot(normal, bitangent);
+    if (dot(tangent, tangent) < 0.000001 || dot(bitangent, bitangent) < 0.000001)
+        return normal;
+    tangent = normalize(tangent);
+    bitangent = normalize(bitangent);
+    vec3 mapped = (uSurface == 1 ? texture(uAsphaltNormalMap, uv)
+        : texture(uConcreteNormalMap, uv)).rgb * 2.0 - 1.0;
+    mapped.xy *= uSurface == 1 ? 0.80 : 0.65;
+    return normalize(mat3(tangent, bitangent, normal) * normalize(mapped));
+}
+
+float GarageLampVisibility(int garageIndex)
+{
+    if (!uEnableBakedShadows || uUseAssetMaterials || uSurface != 2
+        || normalize(worldNormal).y < 0.9)
+        return 1.0;
+    vec3 local = (uGarageWorldToLocal[garageIndex] * vec4(worldPosition, 1.0)).xyz;
+    // Only the Max receiver's top face receives this map. Doorsteps, walls and
+    // nearby concrete paths must not inherit the garage's UVs or its shadows.
+    if (abs(local.y - 0.022) > 0.004 || local.x < -2.33 || local.x > 2.02
+        || local.z < -3.24 || local.z > 3.24)
+        return 1.0;
+    vec2 uv = (local.xz + vec2(2.33, 3.24)) / vec2(4.35, 6.48);
+    return texture(uGarageShadowBake, uv).r;
 }
 
 float LampDiffuse(vec3 lampPosition, vec3 normal)
@@ -314,6 +365,48 @@ vec3 StreetLighting(vec3 normal)
 void main()
 {
     int materialSurface = uUseAssetMaterials ? uAssetSurface : uSurface;
+    if (!uUseAssetMaterials && materialSurface == 23)
+    {
+        // The garage panes transmit the real scene. Snell's law bends the ray
+        // through a thin, slightly uneven sheet; Fresnel adds the sky reflection.
+        vec3 incident = normalize(worldPosition - uCameraPosition);
+        vec3 normal = normalize(worldNormal);
+        vec3 tangent = normalize(uNormalMatrix * vec3(1.0, 0.0, 0.0));
+        vec3 bitangent = normalize(uNormalMatrix * vec3(0.0, 0.0, 1.0));
+        normal = normalize(normal + tangent * sin(texCoord.y * 29.0 + texCoord.x * 7.0) * 0.018
+            + bitangent * sin(texCoord.x * 25.0 - texCoord.y * 5.0) * 0.012);
+        normal = faceforward(normal, incident, normal);
+        const float glassIndex = 1.52;
+        vec3 transmittedRay = uEnableRefraction ? refract(incident, normal, 1.0 / glassIndex) : incident;
+        float cosine = clamp(dot(-incident, normal), 0.0, 1.0);
+        float f0 = (glassIndex - 1.0) / (glassIndex + 1.0);
+        f0 *= f0;
+        float fresnel = f0 + (1.0 - f0) * pow(1.0 - cosine, 5.0);
+        vec2 screenUV = gl_FragCoord.xy / uFramebufferSize;
+        vec3 exitPoint = worldPosition + transmittedRay * (0.065 / max(-dot(transmittedRay, normal), 0.25));
+        vec4 exitClip = uViewProjection * vec4(exitPoint, 1.0);
+        vec2 refractedUV = exitClip.xy / max(exitClip.w, 0.001) * 0.5 + 0.5;
+        vec2 halfPixel = vec2(0.5) / uFramebufferSize;
+        refractedUV = clamp(refractedUV, halfPixel, vec2(1.0) - halfPixel);
+        // A displaced lookup must not pull an opaque object in front of the pane
+        // into its transmitted image (a common screen-space refraction artifact).
+        float sampledDepth = texture(uSceneDepthMap, refractedUV).r;
+        if (sampledDepth < gl_FragCoord.z - 0.00002)
+        {
+            refractedUV = screenUV;
+            sampledDepth = texture(uSceneDepthMap, screenUV).r;
+        }
+        vec3 transmission = sampledDepth > 0.999999
+            ? SkyColor(transmittedRay) : texture(uSceneColorMap, refractedUV).rgb;
+        vec3 reflection = SkyColor(reflect(incident, normal));
+        vec3 glass = mix(transmission * vec3(0.93, 0.985, 0.97), reflection, fresnel);
+        float dirt = grain(texCoord * vec2(80.0, 45.0));
+        glass *= 0.985 + 0.015 * dirt;
+        // Real alpha blending leaves the captured background visible through the
+        // sheet, with depth testing on and depth writes off in the transparent pass.
+        fragColor = vec4(glass, 0.84 + fresnel * 0.12);
+        return;
+    }
     if (materialSurface == 20)
     {
         vec3 emission = uUseAssetMaterials ? uMaterialColor * 1.08
@@ -333,7 +426,7 @@ void main()
         ? (uHasDiffuseMap ? texture(uDiffuseMap, texCoord).rgb : uMaterialColor)
         : surfaceColor();
     vec3 geometricNormal = normalize(worldNormal);
-    vec3 normal = uUseAssetMaterials ? geometricNormal : MicroNormal(geometricNormal);
+    vec3 normal = uUseAssetMaterials ? geometricNormal : SurfaceNormal(geometricNormal);
     vec3 viewDirection = normalize(uCameraPosition - worldPosition);
     vec3 sunDirection = normalize(uSunDirection);
     float sunlight = max(dot(normal, sunDirection), 0.0);
@@ -346,8 +439,10 @@ void main()
     if (!uUseAssetMaterials && materialSurface >= 10 && materialSurface <= 12)
         ambient = max(ambient, vec3(0.48));
     vec3 shade = color * (ambient + direct);
-    float lamp = LampDiffuse(uGarageLampPosition, normal)
-        + LampDiffuse(uSecondGarageLampPosition, normal);
+    // Max's baked point-light visibility modulates that lamp alone. The sun,
+    // skylight and street lights keep their independent illumination/shadows.
+    float lamp = LampDiffuse(uGarageLampPosition, normal) * GarageLampVisibility(0)
+        + LampDiffuse(uSecondGarageLampPosition, normal) * GarageLampVisibility(1);
     shade += color * lamp * vec3(0.85, 0.65, 0.40);
     shade += color * StreetLighting(normal);
 

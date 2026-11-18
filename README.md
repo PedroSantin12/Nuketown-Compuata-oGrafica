@@ -22,11 +22,20 @@ Projeto acadêmico em C++ e OpenGL, desenvolvido a partir da BaseAppOGL fornecid
 - Grama, terra, cercas e telhados com imagens da base das aulas.
 - Asfalto, concreto e pintura com detalhes calculados no shader; mistura de grama e terra.
 - Janelas com molduras, montantes, peitoris e aparência de vidro.
+- Janelas laterais reais nas duas garagens, com transparência, reflexão Fresnel e refração do cenário.
+- Normal Mapping com mapas RGB próprios no asfalto e concreto; bump procedural na pedra e areia.
+- Sombras das caixas e bancada gravadas em textura pelo Render To Texture do 3ds Max e aplicadas ao piso das garagens.
 - Carros e caminhão com carrocerias curvas, para-brisas inclinados, pneus toroidais e rodas detalhadas; a traseira do caminhão fica fechada.
 - Céu com nuvens e sol visível alinhado à direção da iluminação e das sombras, reflexos por cubemap nos vidros/metais, luz nas garagens e antialiasing 4x.
 - Quatro postes de rua e quatro refletores com lentes emissivas e iluminação voltada para baixo.
 
-Os vidros refletem um cubemap do céu, gerado na inicialização. As garagens têm interiores simples acessíveis; os cômodos principais das casas permanecem fechados. O mapa de profundidade do sol é calculado uma vez para os elementos estáticos da cena. A iluminação dos postes no chão também é preparada na inicialização; nas superfícies verticais, ela é calculada no shader. Os arquivos das cenas de exemplo do professor continuam disponíveis como referência; a aplicação inicia apenas a Nuketown.
+Os vidros refletem um cubemap do céu, gerado na inicialização. As janelas laterais das garagens também transmitem e refratam a imagem real do cenário. As garagens têm interiores simples acessíveis; os cômodos principais das casas permanecem fechados. O mapa de profundidade do sol é calculado uma vez para os elementos estáticos da cena. O bake do Max acrescenta as sombras da lâmpada sobre o piso das garagens, independentemente das sombras solares em OpenGL. A iluminação dos postes no chão também é preparada na inicialização; nas superfícies verticais, ela é calculada no shader. Os arquivos das cenas de exemplo do professor continuam disponíveis como referência; a aplicação inicia apenas a Nuketown.
+
+O [guia das exigências e apresentação](REQUISITOS.md) relaciona as dez técnicas avaliadas pelo professor aos arquivos e pontos de demonstração da cena.
+
+![Janela da garagem com transmissão e refração](previews/nuketown-refracao-garagem.png)
+
+![Piso da garagem com normal mapping e bake de sombras](previews/nuketown-bake-garagem.png)
 
 ## Como abrir e executar
 
@@ -61,6 +70,8 @@ F6 abre uma vista ampla do mapa. Nesse modo, a câmera voa sem colisões; WASD a
 
 O menu também permite alternar a câmera livre, ir diretamente ao quintal amarelo ou voltar ao ponto inicial. Os botões de deslocamento saem do modo de inspeção e retomam a caminhada no destino escolhido. Explore pelos caminhos laterais, pelas escadas externas e pelas duas garagens, que podem ser atravessadas da frente até os fundos. As portas dos cômodos principais das casas permanecem fechadas.
 
+Para ver as novas técnicas, pressione **Enter** e use **Ver janela e interior da garagem** ou **Ver piso e caixas da garagem**. As opções **Refração dos vidros**, **Relevo das superfícies** e **Sombras das caixas (3ds Max)** permitem comparar cada efeito com a mesma câmera. Feche o menu com Enter para voltar a olhar e andar.
+
 ## Organização
 
 ```text
@@ -68,6 +79,8 @@ BaseAppOGL/
   Engine/                         Base C++/OpenGL das aulas
   Scenes/Nuketown/                 Código e shaders da cena
     Assets/Bus/                   Modelo .max, exportação .3ds, script e textura
+    Assets/Bake/                  Bake real do Max, cena fonte, receptor e relatório
+    Assets/Materials/             Mapas de normais e gerador dos dados RGB
     TEXTURAS.md                   Origem e aplicação dos materiais
   Scenes/Textures/                Texturas fornecidas nas aulas
   bin/Debug/                     DLLs necessárias em tempo de execução

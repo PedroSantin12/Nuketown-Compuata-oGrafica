@@ -25,7 +25,7 @@ private:
     // These values are shared with the surface branches in Nuketown.frag.
     enum class Surface { Solid, Asphalt, Concrete, Grass, Dirt, Siding, Wood, Roof, Glass, Paint,
         Sign, PoliceMark, Delivery, Stone, VerticalSiding, Shadow, VehiclePaint, Chrome, VehicleGlass, Tire,
-        Emissive, Sand, Mountains };
+        Emissive, Sand, Mountains, RefractiveGlass };
 
     struct Part
     {
@@ -75,12 +75,17 @@ private:
     void RenderShadowMap();
     void BakeSkyEnvironment();
     void DrawSky(const glm::mat4& viewProjection, glm::vec3 viewPosition);
+    void CaptureOpaqueScene(int width, int height);
+    void LoadMaterialMaps();
+    void BindMaterialMaps();
+    void VisitGarage(bool inside = false);
 
     CCamera camera;
     bool menuOpen = false;
     NuketownTraversal traversal;
     glm::vec3 garageLampPosition;
     glm::vec3 secondGarageLampPosition;
+    glm::mat4 garageWorldToLocal[2]{glm::mat4(1.0f), glm::mat4(1.0f)};
     CShader shader;
     CTextures surfaceTextures;
     CPrimitives box;
@@ -93,6 +98,7 @@ private:
     CPrimitives truckHood;
     CPrimitives tire;
     CPrimitives desertBasin;
+    CPrimitives glassPane;
     struct MeshBounds { glm::vec3 center; glm::vec3 half; };
     std::unordered_map<const CPrimitives*, MeshBounds> meshBounds;
     unsigned int shadowFramebuffer = 0;
@@ -106,6 +112,14 @@ private:
     unsigned int environmentTexture = 0;
     std::vector<glm::vec3> streetLightPositions;
     unsigned int streetLightTexture = 0;
+    unsigned int refractionFramebuffer = 0;
+    unsigned int refractionColorTexture = 0;
+    unsigned int refractionDepthTexture = 0;
+    int refractionWidth = 0;
+    int refractionHeight = 0;
+    bool refractionEnabled = true;
+    bool normalMappingEnabled = true;
+    bool bakedShadowsEnabled = true;
     bool flyCameraEnabled = false;
     CCamera savedWalkingCamera;
     CCamera inspectionCamera;

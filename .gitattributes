@@ -8,6 +8,9 @@
 *.vert text
 *.frag text
 *.ms text
+# Preserve the exact source hashes recorded by the Max bake report.
+BaseAppOGL/Scenes/Nuketown/Assets/Bake/MakeGarageBake.ms text eol=lf
+BaseAppOGL/Scenes/Nuketown/Assets/Bake/ValidateBake.py text eol=lf
 *.bmp binary
 *.jpg binary
 *.jpeg binary

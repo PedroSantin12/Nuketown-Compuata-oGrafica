@@ -52,6 +52,7 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera()), inspectionCamera(
     surfaceTextures.LoadTextureAnisotropic(5, "Scenes/Nuketown/Assets/Signs/POLICE.BMP");
     surfaceTextures.LoadTextureAnisotropic(6, "Scenes/Nuketown/Assets/Signs/DELIVERY.BMP");
     surfaceTextures.LoadTextureAnisotropic(7, "Scenes/Textures/rock.jpg");
+    LoadMaterialMaps();
 
     box.generateCube(1.0f);
     cylinder.generateCylinder(1.0f, 1.0f, 72);
@@ -63,6 +64,7 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera()), inspectionCamera(
     truckHood.generateTruckHood();
     tire.generateWheelTorus();
     desertBasin.generateDesertBasin();
+    glassPane.generatePlane(1.0f, 1.0f);
 
     box.setupBuffers();
     cylinder.setupBuffers();
@@ -70,6 +72,7 @@ SceneNuketown::SceneNuketown() : camera(MakeStartingCamera()), inspectionCamera(
     pyramid.setupBuffers();
     roundedBox.setupBuffers(); carBody.setupBuffers(); carCabin.setupBuffers();
     truckHood.setupBuffers(); tire.setupBuffers(); desertBasin.setupBuffers();
+    glassPane.setupBuffers();
 
     BuildEnvironment();
     BuildStreet();
@@ -93,6 +96,9 @@ SceneNuketown::~SceneNuketown()
     glDeleteTextures(1, &shadowTexture);
     glDeleteTextures(1, &environmentTexture);
     glDeleteTextures(1, &streetLightTexture);
+    glDeleteFramebuffers(1, &refractionFramebuffer);
+    glDeleteTextures(1, &refractionColorTexture);
+    glDeleteTextures(1, &refractionDepthTexture);
     glDeleteVertexArrays(1, &skyVao);
 }
 
@@ -137,7 +143,9 @@ void SceneNuketown::DrawScene(float)
     for (int index = 0; index < lightCount; ++index)
         shader.SetVec3("uStreetLightPositions[" + std::to_string(index) + "]", streetLightPositions[index]);
 
-    shader.SetInt("uGrassMap", 0);
+    // The grass and imported diffuse images share unit 0 in separate draw passes.
+    // Sharing this sampler keeps the shader within the 16-unit OpenGL minimum.
+    shader.SetInt("uDiffuseMap", 0);
     shader.SetInt("uSoilMap", 1);
     shader.SetInt("uWoodMap", 2);
     shader.SetInt("uRoofMap", 3);
@@ -151,6 +159,7 @@ void SceneNuketown::DrawScene(float)
         surfaceTextures.ApplyTexture(index);
     }
     glActiveTexture(GL_TEXTURE0);
+    BindMaterialMaps();
     shader.SetBool("uUseAssetMaterials", false);
     // Cull static pieces outside the camera's six frustum planes. Bounds and
     // normal matrices are computed once, when the map is built.
@@ -159,6 +168,7 @@ void SceneNuketown::DrawScene(float)
         rows[3] + rows[1], rows[3] - rows[1], rows[3] + rows[2], rows[3] - rows[2]};
     for (glm::vec4& plane : planes)
         plane /= glm::length(glm::vec3(plane));
+    std::vector<const Part*> transparentParts;
     for (const Part& part : parts)
     {
         bool visible = true;
@@ -170,6 +180,11 @@ void SceneNuketown::DrawScene(float)
             }
         if (!visible)
             continue;
+        if (part.surface == Surface::RefractiveGlass)
+        {
+            transparentParts.push_back(&part);
+            continue;
+        }
         shader.SetMat4("uModel", part.model);
         shader.SetMat3("uNormalMatrix", part.normalMatrix);
         shader.SetVec3("uColor", part.color);
@@ -199,6 +214,60 @@ void SceneNuketown::DrawScene(float)
         shader.SetMat3("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(busModel))));
         busAsset->Draw(shader.GetProgram("Nuketown"));
         glActiveTexture(GL_TEXTURE0);
+    }
+
+    if (!transparentParts.empty())
+    {
+        // Resolve the opaque framebuffer before sampling it: no read/write feedback,
+        // and the original 4x MSAA framebuffer remains the render destination.
+        CaptureOpaqueScene(width, height);
+        shader.SetBool("uUseAssetMaterials", false);
+        shader.SetInt("uSceneColorMap", 11);
+        shader.SetInt("uSceneDepthMap", 15);
+        shader.SetBool("uEnableRefraction", refractionEnabled);
+        shader.SetVec2("uFramebufferSize", static_cast<float>(width), static_cast<float>(height));
+        glActiveTexture(GL_TEXTURE11);
+        glBindTexture(GL_TEXTURE_2D, refractionColorTexture);
+        glActiveTexture(GL_TEXTURE15);
+        glBindTexture(GL_TEXTURE_2D, refractionDepthTexture);
+        glActiveTexture(GL_TEXTURE0);
+        std::sort(transparentParts.begin(), transparentParts.end(),
+            [&viewPosition](const Part* left, const Part* right)
+            {
+                const glm::vec3 l = left->boundsCenter - viewPosition;
+                const glm::vec3 r = right->boundsCenter - viewPosition;
+                return glm::dot(l, l) > glm::dot(r, r);
+            });
+        const GLboolean culling = glIsEnabled(GL_CULL_FACE);
+        const GLboolean blending = glIsEnabled(GL_BLEND);
+        GLboolean depthWrite = GL_TRUE;
+        GLint sourceRGB, destinationRGB, sourceAlpha, destinationAlpha, equationRGB, equationAlpha;
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depthWrite);
+        glGetIntegerv(GL_BLEND_SRC_RGB, &sourceRGB);
+        glGetIntegerv(GL_BLEND_DST_RGB, &destinationRGB);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &sourceAlpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &destinationAlpha);
+        glGetIntegerv(GL_BLEND_EQUATION_RGB, &equationRGB);
+        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &equationAlpha);
+        glDisable(GL_CULL_FACE); // Each pane is one two-sided interface, not two box faces.
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendEquation(GL_FUNC_ADD);
+        glDepthMask(GL_FALSE);
+        for (const Part* part : transparentParts)
+        {
+            shader.SetMat4("uModel", part->model);
+            shader.SetMat3("uNormalMatrix", part->normalMatrix);
+            shader.SetVec3("uColor", part->color);
+            shader.SetVec3("uObjectSize", part->textureSize);
+            shader.SetInt("uSurface", static_cast<int>(part->surface));
+            part->mesh->render();
+        }
+        glDepthMask(depthWrite);
+        glBlendFuncSeparate(sourceRGB, destinationRGB, sourceAlpha, destinationAlpha);
+        glBlendEquationSeparate(equationRGB, equationAlpha);
+        if (!blending) glDisable(GL_BLEND);
+        if (culling) glEnable(GL_CULL_FACE);
     }
     DrawMenu();
 }
@@ -319,6 +388,15 @@ void SceneNuketown::DrawMenu()
                 ToggleFlyCamera();
             camera = CCamera({25.0f, eyeHeight, 3.0f}, {0.0f, 1.0f, 0.0f}, -145.0f, -2.5f);
         }
+        if (ImGui::Button("Ver janela e interior da garagem"))
+            VisitGarage();
+        if (ImGui::Button("Ver piso e caixas da garagem"))
+            VisitGarage(true);
+        ImGui::Separator();
+        ImGui::TextUnformatted("Materiais e iluminacao");
+        ImGui::Checkbox("Relevo das superficies", &normalMappingEnabled);
+        ImGui::Checkbox("Sombras das caixas (3ds Max)", &bakedShadowsEnabled);
+        ImGui::Checkbox("Refracao dos vidros", &refractionEnabled);
         ImGui::Separator();
         ImGui::TextUnformatted("Mapa completo | Exteriores");
         ImGui::TextUnformatted(flyCameraEnabled ? "WASD  voar | Mouse  olhar" : "WASD  andar | Mouse  olhar");
